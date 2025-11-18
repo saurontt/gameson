@@ -1,18 +1,19 @@
-// db.js - Conexão com tentativas de repetição para "acordar" o banco
+// db.js - Conexão com o certificado de segurança oficial
+const fs = require('fs');
+const path = require('path');
 const { Pool } = require('pg');
 require('dotenv').config();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false
+    rejectUnauthorized: false,
+    ca: fs.readFileSync(path.join(__dirname, 'prod-ca-2021.crt')).toString()
   },
-  // Aumenta um pouco o tempo de espera
-  connectionTimeoutMillis: 10000, // 10 segundos
-  idleTimeoutMillis: 30000,     // 30 segundos
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
 });
 
-// A função "insistente"
 async function query(text, params) {
   let retries = 4;
   while (retries > 0) {
@@ -25,9 +26,8 @@ async function query(text, params) {
       console.log(`Falha na conexão. Tentativas restantes: ${retries}. Erro: ${err.code}`);
       if (retries === 0) {
         console.error('Erro no banco após 4 tentativas:', err);
-        throw err; // Se as tentativas acabarem, retorna o erro
+        throw err;
       }
-      // Espera um pouco antes de tentar de novo (2 segundos)
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
   }
