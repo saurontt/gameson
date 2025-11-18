@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste da API</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        input { display: block; margin-bottom: 10px; padding: 8px; width: 300px; }
+        button { padding: 10px 15px; cursor: pointer; }
+        #resultado { margin-top: 20px; padding: 15px; background-color: #f0f0f0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+    <h1>Criar Nova Disputa</h1>
+
+    <form id="disputaForm">
+        <input type="text" id="titulo" placeholder="Título da Disputa" required>
+        <input type="number" id="valor" placeholder="Valor da Aposta" step="0.01" required>
+        <button type="submit">Criar Disputa</button>
+    </form>
+
+    <div id="resultado">
+        <h3>Resposta da API:</h3>
+        <pre id="resposta-json">Aguardando...</pre>
+    </div>
+
+    <script>
+        // !!! IMPORTANTE: COLE A URL DO SEU RENDER AQUI !!!
+        const API_URL = "https://gameson.onrender.com";
+
+        document.getElementById('disputaForm').addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const titulo = document.getElementById('titulo').value;
+            const valor = parseFloat(document.getElementById('valor').value);
+
+            const dadosDaDisputa = {
+                criador_id: 1, 
+                titulo: titulo,
+                valor_aposta: valor
+            };
+
+            try {
+                const response = await fetch(`${API_URL}/api/disputas`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(dadosDaDisputa),
+                });
+
+                const resultado = await response.json();
+                document.getElementById('resposta-json').textContent = JSON.stringify(resultado, null, 2);
+
+            } catch (error) {
+                document.getElementById('resposta-json').textContent = 'Erro: ' + error.message;
+            }
+        });
+    </script>
+
+</body>
+</html>
