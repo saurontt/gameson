@@ -1,24 +1,21 @@
-// db.js - Conexão com o certificado de segurança oficial
-const fs = require('fs');
-const path = require('path');
+// db.js - Conexão com o banco de dados Neon
 const { Pool } = require('pg');
 require('dotenv').config();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false,
-    ca: fs.readFileSync(path.join(__dirname, 'prod-ca-2021.crt')).toString()
+    rejectUnauthorized: false
   },
   connectionTimeoutMillis: 10000,
   idleTimeoutMillis: 30000,
 });
 
+// Função com tentativas de repetição para "acordar" o banco
 async function query(text, params) {
   let retries = 4;
   while (retries > 0) {
     try {
-      const start = Date.now();
       const res = await pool.query(text, params);
       return res;
     } catch (err) {

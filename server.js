@@ -12,12 +12,13 @@ try {
 console.log('----------------------------------------------------');
 // FIM DO CÓDIGO DE DEBUG
 
-// O resto do seu código começa aqui
+// O RESTO DO SEU CÓDIGO COMEÇA AQUI
+
 const express = require('express');
 const cors = require('cors');
 const db = require('./db');
 const disputasRoutes = require('./routes/disputas');
-const feedRoutes = require('./routes/feed');
+const campeonatosRoutes = require('./routes/campeonatos'); // <-- ADICIONE ESTA LINHA
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -25,11 +26,11 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-app.get('/', (req, res) => res.send('API da Plataforma de Disputas está no ar!'));
+app.get('/', (req, res) => res.send('API da Plataforma de Disputas e Campeonatos está no ar!'));
 
-// CORREÇÃO DO CONFLITO DE ROTAS
+// CORREÇÃO: Rotas para disputas e campeonatos, cada uma com seu próprio caminho
 app.use('/api/disputas', disputasRoutes);
-app.use('/api/disputas', feedRoutes); // Esta rota agora vai ser verificada
+app.use('/api/campeonatos', campeonatosRoutes); // <-- ADICIONE ESTA LINHA
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
