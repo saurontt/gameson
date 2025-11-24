@@ -3,61 +3,152 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teste da API</title>
+    <title>GamesOn - Teste de Campeonatos</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; }
-        input { display: block; margin-bottom: 10px; padding: 8px; width: 300px; }
-        button { padding: 10px 15px; cursor: pointer; }
-        #resultado { margin-top: 20px; padding: 15px; background-color: #f0f0f0; border-radius: 5px; }
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f4f4; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1, h2 { color: #333; }
+        form { display: flex; flex-direction: column; gap: 15px; margin-bottom: 40px; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
+        input, select { padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
+        button { padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #0056b3; }
+        #campeonatos-list { list-style-type: none; padding: 0; }
+        .campeonato-item { background: #e9ecef; margin-bottom: 10px; padding: 15px; border-radius: 5px; border-left: 5px solid #007bff; }
+        .campeonato-item h3 { margin: 0 0 10px 0; }
+        .campeonato-item p { margin: 0; color: #555; }
+        #message { padding: 10px; margin-top: 15px; border-radius: 5px; display: none; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     </style>
 </head>
 <body>
 
-    <h1>Criar Nova Disputa</h1>
+    <div class="container">
+        <h1>Criar Novo Campeonato</h1>
+        <form id="form-criar-campeonato">
+            <!-- Para o teste, o criador_id será fixo -->
+            <input type="hidden" id="criador_id" value="1">
+            
+            <label for="nome">Nome do Campeonato:</label>
+            <input type="text" id="nome" required>
 
-    <form id="disputaForm">
-        <input type="text" id="titulo" placeholder="Título da Disputa" required>
-        <input type="number" id="valor" placeholder="Valor da Aposta" step="0.01" required>
-        <button type="submit">Criar Disputa</button>
-    </form>
+            <label for="modalidade">Modalidade:</label>
+            <input type="text" id="modalidade" value="Futevôlei de Duplas" required>
 
-    <div id="resultado">
-        <h3>Resposta da API:</h3>
-        <pre id="resposta-json">Aguardando...</pre>
+            <label for="valor_inscricao">Valor da Inscrição:</label>
+            <input type="number" id="valor_inscricao" step="0.01" value="50.00" required>
+
+            <label for="premio_1">Prêmio 1º Lugar (%):</label>
+            <input type="number" id="premio_1" step="0.01" value="0.6" required>
+
+            <label for="premio_2">Prêmio 2º Lugar (%):</label>
+            <input type="number" id="premio_2" step="0.01" value="0.3" required>
+
+            <label for="premio_3">Prêmio 3º Lugar (%):</label>
+            <input type="number" id="premio_3" step="0.01" value="0.1" required>
+
+            <button type="submit">Criar Campeonato</button>
+        </form>
+
+        <div id="message"></div>
+
+        <h2>Campeonatos Abertos</h2>
+        <ul id="campeonatos-list">
+            <!-- A lista de campeonatos será carregada aqui pelo JavaScript -->
+        </ul>
     </div>
 
     <script>
-        // !!! IMPORTANTE: COLE A URL DO SEU RENDER AQUI !!!
-        const API_URL = "https://gameson.onrender.com";
+        const API_URL = 'https://gameson.onrender.com/api';
+        const form = document.getElementById('form-criar-campeonato');
+        const campeonatosList = document.getElementById('campeonatos-list');
+        const messageDiv = document.getElementById('message');
 
-        document.getElementById('disputaForm').addEventListener('submit', async (event) => {
-            event.preventDefault();
+        // Função para exibir mensagens de sucesso ou erro
+        function showMessage(text, isError = false) {
+            messageDiv.textContent = text;
+            messageDiv.className = isError ? 'error' : 'success';
+            messageDiv.style.display = 'block';
+            setTimeout(() => {
+                messageDiv.style.display = 'none';
+            }, 5000);
+        }
 
-            const titulo = document.getElementById('titulo').value;
-            const valor = parseFloat(document.getElementById('valor').value);
+        // Função para buscar e exibir a lista de campeonatos
+        async function fetchCampeonatos() {
+            try {
+                const response = await fetch(`${API_URL}/campeonatos`);
+                if (!response.ok) throw new Error('Falha ao buscar campeonatos');
+                
+                const campeonatos = await response.json();
+                campeonatosList.innerHTML = ''; // Limpa a lista atual
 
-            const dadosDaDisputa = {
-                criador_id: 1, 
-                titulo: titulo,
-                valor_aposta: valor
+                if (campeonatos.length === 0) {
+                    campeonatosList.innerHTML = '<li>Nenhum campeonato aberto no momento.</li>';
+                    return;
+                }
+
+                campeonatos.forEach(campeonato => {
+                    const li = document.createElement('li');
+                    li.className = 'campeonato-item';
+                    li.innerHTML = `
+                        <h3>${campeonato.nome}</h3>
+                        <p><strong>Modalidade:</strong> ${campeonato.modalidade}</p>
+                        <p><strong>Inscrição:</strong> R$ ${parseFloat(campeonato.valor_inscricao).toFixed(2)}</p>
+                        <p><strong>Pote Atual:</strong> R$ ${parseFloat(campeonato.pote_total).toFixed(2)}</p>
+                    `;
+                    campeonatosList.appendChild(li);
+                });
+
+            } catch (error) {
+                showMessage('Erro ao carregar a lista de campeonatos.', true);
+                console.error(error);
+            }
+        }
+
+        // Event listener para o formulário de criação
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault(); // Impede o recarregamento da página
+
+            const dadosCampeonato = {
+                criador_id: parseInt(document.getElementById('criador_id').value),
+                nome: document.getElementById('nome').value,
+                modalidade: document.getElementById('modalidade').value,
+                valor_inscricao: parseFloat(document.getElementById('valor_inscricao').value),
+                distribuicao_premios: {
+                    "1": parseFloat(document.getElementById('premio_1').value),
+                    "2": parseFloat(document.getElementById('premio_2').value),
+                    "3": parseFloat(document.getElementById('premio_3').value)
+                }
             };
 
             try {
-                const response = await fetch(`${API_URL}/api/disputas`, {
+                const response = await fetch(`${API_URL}/campeonatos`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify(dadosDaDisputa),
+                    body: JSON.stringify(dadosCampeonato),
                 });
 
-                const resultado = await response.json();
-                document.getElementById('resposta-json').textContent = JSON.stringify(resultado, null, 2);
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || 'Erro ao criar campeonato');
+                }
+
+                showMessage('Campeonato criado com sucesso!');
+                form.reset(); // Limpa o formulário
+                fetchCampeonatos(); // Atualiza a lista
 
             } catch (error) {
-                document.getElementById('resposta-json').textContent = 'Erro: ' + error.message;
+                showMessage(`Erro: ${error.message}`, true);
+                console.error(error);
             }
         });
+
+        // Carrega a lista de campeonatos quando a página é aberta
+        document.addEventListener('DOMContentLoaded', fetchCampeonatos);
     </script>
 
 </body>
