@@ -102,21 +102,29 @@ router.post('/:id/participar', async (req, res) => {
 });
 
 // --- ROTA 4: Iniciar o campeonato e gerar a chave (POST /api/campeonatos/:id/iniciar) ---
+// LÓGICA CORRIGIDA PARA EMPARELHAR DUPLAS
 router.post('/:id/iniciar', async (req, res) => {
     const { id } = req.params;
     try {
-        const participantes = await db.query('SELECT usuario_id FROM participantes_campeonato WHERE campeonato_id = $1', [id]);
+        // Pega os IDs das duplas (da tabela participantes_campeonato)
+        const participantesQuery = await db.query('SELECT id FROM participantes_campeonato WHERE campeonato_id = $1', [id]);
         
-        if (participantes.rows.length < 2) {
-            return res.status(400).json({ error: 'Número insuficiente de participantes para iniciar.' });
+        if (participantesQuery.rows.length < 2) {
+            return res.status(400).json({ error: 'Número insuficiente de duplas para iniciar.' });
         }
 
-        const jogos = [{
-            campeonato_id: id,
-            fase: 'primeira_fase',
-            participante1_id: participantes.rows[0].usuario_id,
-            participante2_id: participantes.rows[1].usuario_id
-        }];
+        const duplasEmbaralhadas = participantesQuery.rows.sort(() => Math.random() - 0.5);
+        const faseNome = 'primeira_fase';
+        const jogos = [];
+
+        for (let i = 0; i < duplasEmbaralhadas.length; i += 2) {
+            jogos.push({
+                campeonato_id: id,
+                fase: faseNome,
+                participante1_id: duplasEmbaralhadas[i].id, // CORRIGIDO: usa o ID da dupla
+                participante2_id: duplasEmbaralhadas[i+1].id  // CORRIGIDO: usa o ID da dupla
+            });
+        }
 
         const insertQuery = 'INSERT INTO jogos_campeonato (campeonato_id, fase, participante1_id, participante2_id) VALUES ($1, $2, $3, $4)';
         await db.query('BEGIN');
@@ -127,12 +135,60 @@ router.post('/:id/iniciar', async (req, res) => {
         await db.query('UPDATE campeonatos SET status = $1 WHERE id = $2', ['em_andamento', id]);
         await db.query('COMMIT');
 
-        res.status(200).json({ message: 'Campeonato iniciado e chave gerada!', jogos: jogos });
+        res.status(200).json({ message: 'Campeonato iniciado e chave gerada!', fase: faseNome, jogos: jogos });
 
     } catch (error) {
         await db.query('ROLLBACK');
         console.error('Erro ao iniciar campeonato:', error);
         res.status(500).json({ error: 'Erro ao iniciar o campeonato.' });
+    }
+});
+
+// --- ROTA 5: Reportar resultado de um jogo (POST /api/campeonatos/:id/jogos/:jogoId/reportar) ---
+router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
+    const { id, jogoId } = req.params;
+    const { resultado_participante1, resultado_participante2 } = req.body;
+
+    if (!resultado_participante1 || !resultado_participante2) {
+        return res.status(400).json({ error: 'Os resultados dos dois participantes são obrigatórios.' });
+    }
+
+    try {
+        await db.query('BEGIN');
+
+        // 1. Busca o jogo para validar
+        const jogoQuery = await db.query('SELECT * FROM jogos_campeonato WHERE id = $1 AND campeonato_id = $2', [jogoId, id]);
+        if (jogoQuery.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Jogo não encontrado.' });
+        }
+
+        // 2. Determina o vencedor
+        const resultado1 = parseInt(resultado_participante1);
+        const resultado2 = parseInt(resultado_participante2);
+        let vencedorId;
+        if (resultado1 > resultado2) {
+            vencedorId = jogoQuery.rows[0].participante1_id;
+        } else if (resultado2 > resultado1) {
+            vencedorId = jogoQuery.rows[0].participante2_id;
+        } else {
+            await db.query('ROLLBACK');
+            return res.status(400).json({ error: 'Empates não são permitidos nesta fase.' });
+        }
+
+        // 3. Atualiza o resultado do jogo
+        await db.query(
+            'UPDATE jogos_campeonato SET resultado_participante1 = $1, resultado_participante2 = $2, vencedor_id = $3 WHERE id = $4',
+            [resultado1, resultado2, vencedorId, jogoId]
+        );
+
+        await db.query('COMMIT');
+        res.status(200).json({ message: 'Resultado reportado com sucesso!', vencedor_id: vencedorId });
+
+    } catch (error) {
+        await db.query('ROLLBACK');
+        console.error('Erro ao reportar resultado:', error);
+        res.status(500).json({ error: 'Erro ao reportar resultado.' });
     }
 });
 
