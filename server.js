@@ -1,37 +1,47 @@
-// INÍCIO DO CÓDIGO DE DEBUG
-const fs = require('fs');
-const path = require('path');
-
-console.log('--- Arquivos que o Render vê na pasta "routes" ---');
-try {
-  const files = fs.readdirSync(path.join(__dirname, 'routes'));
-  console.log(files);
-} catch (err) {
-  console.error('Erro ao ler a pasta "routes":', err);
-}
-console.log('----------------------------------------------------');
-// FIM DO CÓDIGO DE DEBUG
-
-// O RESTO DO SEU CÓDIGO COMEÇA AQUI
+// server.js
 
 const express = require('express');
-const cors = require('cors');
-const db = require('./db');
+const path = require('path');
+const fs = require('fs'); // Módulo para interagir com o sistema de arquivos
+
+// Importa as rotas
+const feedRoutes = require('./routes/feed');
 const disputasRoutes = require('./routes/disputas');
-const campeonatosRoutes = require('./routes/campeonatos'); // <-- ADICIONE ESTA LINHA
+const campeonatosRoutes = require('./routes/campeonatos');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+// Middleware para servir arquivos estáticos da pasta raiz do projeto
+// Onde está o seu index.html
+app.use(express.static(__dirname));
+
+// Middleware para o Express entender JSON
 app.use(express.json());
 
-app.get('/', (req, res) => res.send('API da Plataforma de Disputas e Campeonatos está no ar!'));
-
-// CORREÇÃO: Rotas para disputas e campeonatos, cada uma com seu próprio caminho
+// --- DEFINE AS ROTAS DA API ---
+app.use('/api/feed', feedRoutes);
 app.use('/api/disputas', disputasRoutes);
-app.use('/api/campeonatos', campeonatosRoutes); // <-- ADICIONE ESTA LINHA
+app.use('/api/campeonatos', campeonatosRoutes);
 
+// Rota de saúde para o Render
+app.get('/', (req, res) => {
+  res.status(200).send('API da GamesOn está no ar!');
+});
+
+// Inicia o servidor
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
+
+  // >>> LINHA DE DIAGNÓSTICO <<<
+  // Lista todos os arquivos na pasta do projeto quando o servidor inicia
+  fs.readdir(__dirname, (err, files) => {
+    if (err) {
+      console.error("Erro ao ler o diretório:", err);
+      return;
+    }
+    console.log("--- Arquivos que o Render vê na pasta raiz ---");
+    console.log(files);
+    console.log("--------------------------------------------");
+  });
 });
