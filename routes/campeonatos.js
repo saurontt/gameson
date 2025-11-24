@@ -8,8 +8,7 @@ const router = express.Router();
 
 // Mapeia o nome da fase para a próxima fase
 const proximaFaseMap = {
-    'primeira_fase': 'semi_final',
-    'semi_final': 'final',
+    'primeira_fase': 'final', // A próxima fase após a primeira é a final
     'final': 'finalizado'
 };
 
@@ -152,7 +151,7 @@ router.post('/:id/iniciar', async (req, res) => {
 });
 
 
-// --- ROTA 5: Reportar resultado e avançar fase (NOVA LÓGICA) ---
+// --- ROTA 5: Reportar resultado e avançar fase (LÓGICA CORRIGIDA) ---
 router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
     const { id, jogoId } = req.params;
     const { resultado_participante1, resultado_participante2 } = req.body;
@@ -206,7 +205,10 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
 
             if (proximaFase === 'finalizado') {
                 // LÓGICA DE FINALIZAÇÃO DO CAMPEONATO
-                await finalizarCampeonato(id, vencedoresDaFase[0]); // Pega o único vencedor
+                await finalizarCampeonato(id, vencedoresDaFase[0]);
+            } else if (proximaFase === 'final') {
+                // CORREÇÃO: Para este formato, o vencedor da semi-final é o campeão.
+                await finalizarCampeonato(id, vencedoresDaFase[0]);
             } else {
                 // LÓGICA DE AVANÇO DE FASE
                 await criarProximaFase(id, proximaFase, vencedoresDaFase);
@@ -223,6 +225,7 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
     }
 });
 
+
 // --- FUNÇÕES DE APOIO PARA A LÓGICA AVANÇADA ---
 
 async function criarProximaFase(campeonatoId, nomeFase, vencedoresIds) {
@@ -230,15 +233,12 @@ async function criarProximaFase(campeonatoId, nomeFase, vencedoresIds) {
 
     const jogos = [];
     for (let i = 0; i < vencedoresIds.length; i += 2) {
-        // Se for ímpar, o último passa direto (bye)
-        if (vencedoresIds[i + 1]) {
-            jogos.push({
-                campeonato_id: campeonatoId,
-                fase: nomeFase,
-                participante1_id: vencedoresIds[i],
-                participante2_id: vencedoresIds[i+1]
-            });
-        }
+        jogos.push({
+            campeonato_id: campeonatoId,
+            fase: nomeFase,
+            participante1_id: vencedoresIds[i],
+            participante2_id: vencedoresIds[i+1]
+        });
     }
 
     const insertQuery = 'INSERT INTO jogos_campeonato (campeonato_id, fase, participante1_id, participante2_id) VALUES ($1, $2, $3, $4)';
