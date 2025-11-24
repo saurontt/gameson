@@ -1,7 +1,7 @@
 {
   "criador_id": 1,
   "nome": "Campeonato de Futevôlei - Teste Final",
-  "esporte": "Futevôlei de Duplas",
+  "modalidade": "Futevôlei de Duplas",
   "valor_inscricao": 50.00,
   "distribuicao_premios": { "1": 0.6, "2": 0.3, "3": 0.1 }
 }

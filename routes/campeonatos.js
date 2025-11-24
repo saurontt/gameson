@@ -5,7 +5,6 @@ const db = require('../db');
 const router = express.Router();
 
 // --- ROTA 1: Listar campeonatos abertos (GET /api/campeonatos) ---
-// Rota usada pela tela principal de campeonatos
 router.get('/', async (req, res) => {
   try {
     const result = await db.query(
@@ -25,18 +24,21 @@ router.post('/', async (req, res) => {
   console.log(">>> CORPO DA REQUISIÇÃO RECEBIDO:", req.body);
   // -------------------------------------------------------------
 
-  const { criador_id, nome, esporte, valor_inscricao, distribuicao_premios } = req.body;
+  // MUDADO: 'esporte' foi trocado por 'modalidade'
+  const { criador_id, nome, modalidade, valor_inscricao, distribuicao_premios } = req.body;
   const taxa_plataforma = 0.10; // 10%
 
-  if (!criador_id || !nome || !esporte || !valor_inscricao || !distribuicao_premios) {
+  // MUDADO: Verificação agora usa 'modalidade'
+  if (!criador_id || !nome || !modalidade || !valor_inscricao || !distribuicao_premios) {
     return res.status(400).json({ error: 'Campos obrigatórios faltando.' });
   }
 
   try {
+    // MUDADO: INSERT agora usa a coluna 'modalidade'
     const newCampeonato = await db.query(
-      `INSERT INTO campeonatos (criador_id, nome, esporte, valor_inscricao, taxa_plataforma, distribuicao_premios, status)
+      `INSERT INTO campeonatos (criador_id, nome, modalidade, valor_inscricao, taxa_plataforma, distribuicao_premios, status)
        VALUES ($1, $2, $3, $4, $5, $6, 'aberto') RETURNING *`,
-      [criador_id, nome, esporte, valor_inscricao, taxa_plataforma, distribuicao_premios]
+      [criador_id, nome, modalidade, valor_inscricao, taxa_plataforma, distribuicao_premios]
     );
 
     res.status(201).json(newCampeonato.rows[0]);
@@ -59,7 +61,6 @@ router.post('/:id/participar', async (req, res) => {
   try {
     await db.query('BEGIN');
 
-    // 1. Verifica se o campeonato existe e está aberto
     const campeonatoQuery = await db.query('SELECT * FROM campeonatos WHERE id = $1', [id]);
     if (campeonatoQuery.rows.length === 0 || campeonatoQuery.rows[0].status !== 'aberto') {
       await db.query('ROLLBACK');
@@ -67,7 +68,6 @@ router.post('/:id/participar', async (req, res) => {
     }
     const valorInscricao = parseFloat(campeonatoQuery.rows[0].valor_inscricao);
 
-    // 2. Verifica se os usuários têm saldo suficiente
     for (const usuarioId of [usuario1_id, usuario2_id]) {
       const userSaldoQuery = await db.query('SELECT saldo FROM usuarios WHERE id = $1', [usuarioId]);
       if (userSaldoQuery.rows.length === 0 || parseFloat(userSaldoQuery.rows[0].saldo) < valorInscricao) {
@@ -76,7 +76,6 @@ router.post('/:id/participar', async (req, res) => {
       }
     }
 
-    // 3. Debita o saldo de ambos e cria as transações
     for (const usuarioId of [usuario1_id, usuario2_id]) {
       await db.query('UPDATE usuarios SET saldo = saldo - $1 WHERE id = $2', [valorInscricao, usuarioId]);
       await db.query(
@@ -85,13 +84,11 @@ router.post('/:id/participar', async (req, res) => {
       );
     }
     
-    // 4. Inscreve a dupla
     await db.query(
       'INSERT INTO participantes_campeonato (campeonato_id, usuario1_id, usuario2_id) VALUES ($1, $2, $3)',
       [id, usuario1_id, usuario2_id]
     );
     
-    // 5. Atualiza o pote do campeonato
     await db.query('UPDATE campeonatos SET pote_total = pote_total + $1 WHERE id = $2', [valorInscricao * 2, id]);
 
     await db.query('COMMIT');
@@ -114,9 +111,8 @@ router.post('/:id/iniciar', async (req, res) => {
             return res.status(400).json({ error: 'Número insuficiente de duplas para iniciar.' });
         }
 
-        // Lógica para embaralhar e criar os pares da primeira fase
         const duplasEmbaralhadas = participantes.rows.sort(() => Math.random() - 0.5);
-        const faseNome = 'round_of_64'; // Ajustar conforme número de participantes
+        const faseNome = 'round_of_64';
         const jogos = [];
 
         for (let i = 0; i < duplasEmbaralhadas.length; i += 2) {
@@ -128,7 +124,6 @@ router.post('/:id/iniciar', async (req, res) => {
             });
         }
 
-        // Insere todos os jogos da primeira fase no banco de dados
         const insertQuery = 'INSERT INTO jogos_campeonato (campeonato_id, fase, participante1_id, participante2_id) VALUES ($1, $2, $3, $4)';
         await db.query('BEGIN');
         for (const jogo of jogos) {
