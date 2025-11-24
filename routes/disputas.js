@@ -278,5 +278,24 @@ router.post('/:id/contestar', async (req, res) => {
   }
 });
 
+// --- ROTA DE TESTE: Criar um novo usuário (POST /api/disputas/usuarios) ---
+router.post('/usuarios', async (req, res) => {
+  const { nome, login, senha } = req.body;
+  if (!nome || !login || !senha) {
+    return res.status(400).json({ error: 'Nome, login e senha são obrigatórios.' });
+  }
+  try {
+    // Em um app real, a senha seria hasheada!
+    const newUser = await db.query(
+      'INSERT INTO usuarios (nome, login, senha, saldo) VALUES ($1, $2, $3, $4) RETURNING id, nome, saldo',
+      [nome, login, senha, 1000.0] // Saldo inicial de 1000
+    );
+    res.status(201).json(newUser.rows[0]);
+  } catch (error) {
+    console.error('Erro ao criar usuário:', error);
+    res.status(500).json({ error: 'Erro ao criar usuário.' });
+  }
+});
+
 
 module.exports = router;
