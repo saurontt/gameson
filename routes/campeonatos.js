@@ -1,156 +1,150 @@
-// routes/campeonatos.js - Lógica completa para o módulo de campeonatos
+// routes/campeonatos.js
+
 const express = require('express');
 const db = require('../db');
-
 const router = express.Router();
 
-// --- FUNÇÕES AUXILIARES ---
+// --- ROTA 1: Listar campeonatos abertos (GET /api/campeonatos) ---
+// Rota usada pela tela principal de campeonatos
+router.get('/', async (req, res) => {
+  try {
+    const result = await db.query(
+      'SELECT * FROM campeonatos WHERE status = $1 ORDER BY data_criacao DESC',
+      ['aberto']
+    );
+    res.status(200).json(result.rows);
+  } catch (error) {
+    console.error('Erro ao listar campeonatos:', error);
+    res.status(500).json({ error: 'Erro ao buscar campeonatos.' });
+  }
+});
 
-// Função para debitar o valor da inscrição da carteira do usuário
-async function debitarInscricao(usuarioId, valorInscricao, campeonatoId, descricao) {
-  await db.query('BEGIN');
-  await db.query('UPDATE usuarios SET saldo = saldo - $1 WHERE id = $2', [valorInscricao, usuarioId]);
-  await db.query(
-    'INSERT INTO transacoes (usuario_id, tipo, valor, descricao, campeonato_id) VALUES ($1, $2, $3, $4, $5)',
-    ['inscricao_campeonato', -valorInscricao, `Inscrição no campeonato "${descricao}"`, campeonatoId]
-  );
-  await db.query('COMMIT');
-}
-
-// --- ROTAS DA API ---
-
-// ROTA 1: Criar um novo campeonato
+// --- ROTA 2: Criar um novo campeonato (POST /api/campeonatos) ---
 router.post('/', async (req, res) => {
-  const { criador_id, nome, descricao, modalidade, valor_inscricao, regras } = req.body;
+  // --- LINHA DE DEPURAÇÃO PARA VER O QUE O SERVIDOR RECEBE ---
+  console.log(">>> CORPO DA REQUISIÇÃO RECEBIDO:", req.body);
+  // -------------------------------------------------------------
 
-  if (!criador_id || !nome || !modalidade || !valor_inscricao) {
+  const { criador_id, nome, esporte, valor_inscricao, distribuicao_premios } = req.body;
+  const taxa_plataforma = 0.10; // 10%
+
+  if (!criador_id || !nome || !esporte || !valor_inscricao || !distribuicao_premios) {
     return res.status(400).json({ error: 'Campos obrigatórios faltando.' });
   }
 
   try {
-    await db.query('BEGIN');
-
-    // 1. Inserir o campeonato no banco
     const newCampeonato = await db.query(
-      'INSERT INTO campeonatos (criador_id, nome, descricao, modalidade, valor_inscricao, status, regras) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [criador_id, nome, descricao, modalidade, valor_inscricao, 'aberto_para_inscricao', regras]
+      `INSERT INTO campeonatos (criador_id, nome, esporte, valor_inscricao, taxa_plataforma, distribuicao_premios, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'aberto') RETURNING *`,
+      [criador_id, nome, esporte, valor_inscricao, taxa_plataforma, distribuicao_premios]
     );
-
-    const campeonatoId = newCampeonato.rows[0].id;
 
     res.status(201).json(newCampeonato.rows[0]);
 
   } catch (error) {
-    await db.query('ROLLBACK');
-    console.error('Erro ao criar o campeonato:', error);
+    console.error('Erro ao criar campeonato:', error);
     res.status(500).json({ error: 'Erro ao criar o campeonato.' });
   }
 });
 
-// ROTA 2: Inscrever um usuário em um campeonato
-router.post('/:id/inscrever', async (req, res) => {
-  const { usuario_id } = req.body;
-  const { id: campeonatoId } = req.params;
+// --- ROTA 3: Inscrever uma dupla no campeonato (POST /api/campeonatos/:id/participar) ---
+router.post('/:id/participar', async (req, res) => {
+  const { id } = req.params;
+  const { usuario1_id, usuario2_id } = req.body;
 
-  if (!usuario_id) {
-    return res.status(400).json({ error: 'ID do usuário é obrigatório.' });
+  if (!id || !usuario1_id || !usuario2_id) {
+    return res.status(400).json({ error: 'ID do campeonato e IDs dos dois usuários são obrigatórios.' });
   }
 
   try {
-    // Verificar se o campeonato existe e está aberto para inscrições
-    const campeonato = await db.query('SELECT status, valor_inscricao FROM campeonatos WHERE id = $1', [campeonatoId]);
-    if (campeonato.rows.length === 0) {
-      return res.status(404).json({ error: 'Campeonato não encontrado.' });
+    await db.query('BEGIN');
+
+    // 1. Verifica se o campeonato existe e está aberto
+    const campeonatoQuery = await db.query('SELECT * FROM campeonatos WHERE id = $1', [id]);
+    if (campeonatoQuery.rows.length === 0 || campeonatoQuery.rows[0].status !== 'aberto') {
+      await db.query('ROLLBACK');
+      return res.status(400).json({ error: 'Campeonato não encontrado ou inscrições encerradas.' });
     }
-    if (campeonato.rows[0].status !== 'aberto_para_inscricao') {
-      return res.status(400).json({ error: 'Este campeonato não está mais aberto para inscrições.' });
+    const valorInscricao = parseFloat(campeonatoQuery.rows[0].valor_inscricao);
+
+    // 2. Verifica se os usuários têm saldo suficiente
+    for (const usuarioId of [usuario1_id, usuario2_id]) {
+      const userSaldoQuery = await db.query('SELECT saldo FROM usuarios WHERE id = $1', [usuarioId]);
+      if (userSaldoQuery.rows.length === 0 || parseFloat(userSaldoQuery.rows[0].saldo) < valorInscricao) {
+        await db.query('ROLLBACK');
+        return res.status(402).json({ error: `Usuário ${usuarioId} não encontrado ou com saldo insuficiente.` });
+      }
     }
 
-    const valorInscricao = campeonato.rows[0].valor_inscricao;
-
-    // Inserir o participante e debitar o valor
-    await db.query('BEGIN');
-    await db.query(
-      'INSERT INTO participantes_campeonato (campeonato_id, usuario_id, status) VALUES ($1, $2, $3)',
-      [campeonatoId, usuario_id, 'inscrito']
-    );
-    await db.query('COMMIT');
-
-    // Chamar a função auxiliar para debitar da carteira
-    await debitarInscricao(usuario_id, valorInscricao, campeonatoId, `Inscrição no campeonato`);
-
-    res.status(201).json({ message: 'Inscrição realizada com sucesso!' });
-
-  } catch (error) {
-    await db.query('ROLLBACK');
-    console.error('Erro ao se inscrever no campeonato:', error);
-    res.status(500).json({ error: 'Erro ao se inscrever no campeonato.' });
-  }
-});
-
-// ROTA 3: Reportar o resultado de uma partida (simplificado)
-router.post('/:id/partida/:partidaId/reportar', async (req, res) => {
-  const { id: campeonatoId, partidaId } = req.params;
-  const { resultado, vencedor_id } = req.body;
-
-  if (!resultado || !vencedor_id) {
-    return res.status(400).json({ error: 'Resultado e vencedor são obrigatórios.' });
-  }
-
-  try {
-    await db.query('BEGIN');
-
-    // Atualizar o status da partida (simplificado)
-    await db.query(
-      'UPDATE partidas SET vencedor_id = $1 WHERE id = $2',
-      [vencedor_id, partidaId]
-    );
-
-    // Lógica de prêmios pode ser adicionada aqui
-
-    await db.query('COMMIT');
-
-    res.status(200).json({ message: 'Resultado da partida reportado com sucesso!' });
-
-  } catch (error) {
-    await db.query('ROLLBACK');
-    console.error('Erro ao reportar partida:', error);
-    res.status(500).json({ error: 'Erro ao reportar partida.' });
-  }
-});
-
-// ROTA 4: Finalizar um campeonato
-router.post('/:id/finalizar', async (req, res) => {
-  const { id: campeonatoId } = req.params;
-  const { colocacoes } = req.body; // Ex: {"1_lugar": {"vencedor_id": 1, "premio": "50%"}, "2_lugar": {"vencedor_id": 2, "premio": "30%"}}
-
-  if (!id || !colocacoes) {
-    return res.status(400).json({ error: 'ID do campeonato e as colocações são obrigatórios.' });
-  }
-
-  try {
-    await db.query('BEGIN');
-
-    // 1. Finalizar o campeonato
-    await db.query('UPDATE campeonatos SET status = $1 WHERE id = $1', ['finalizado', campeonatoId]);
-
-    // 2. Criar os prêmios no banco
-    for (const [posicao, premio] of Object.entries(colocacoes)) {
+    // 3. Debita o saldo de ambos e cria as transações
+    for (const usuarioId of [usuario1_id, usuario2_id]) {
+      await db.query('UPDATE usuarios SET saldo = saldo - $1 WHERE id = $2', [valorInscricao, usuarioId]);
       await db.query(
-        'INSERT INTO premios_campeonato (campeonato_id, colocacao, descricao, valor) VALUES ($1, $2, $3, $4)',
-        [campeonatoId, posicao, `Prêmio ${posicao}º Lugar`, premio.valor]
+        'INSERT INTO transacoes (usuario_id, tipo, valor, descricao, campeonato_id) VALUES ($1, $2, $3, $4, $5)',
+        [usuarioId, 'inscricao_campeonato', -valorInscricao, `Inscrição no campeonato ${campeonatoQuery.rows[0].nome}`, id]
       );
     }
+    
+    // 4. Inscreve a dupla
+    await db.query(
+      'INSERT INTO participantes_campeonato (campeonato_id, usuario1_id, usuario2_id) VALUES ($1, $2, $3)',
+      [id, usuario1_id, usuario2_id]
+    );
+    
+    // 5. Atualiza o pote do campeonato
+    await db.query('UPDATE campeonatos SET pote_total = pote_total + $1 WHERE id = $2', [valorInscricao * 2, id]);
 
     await db.query('COMMIT');
-
-    res.status(200).json({ message: 'Campeonato finalizado com sucesso!' });
+    res.status(200).json({ message: 'Dupla inscrita com sucesso!' });
 
   } catch (error) {
     await db.query('ROLLBACK');
-    console.error('Erro ao finalizar o campeonato:', error);
-    res.status(500).json({ error: 'Erro ao finalizar o campeonato.' });
+    console.error('Erro ao inscrever dupla:', error);
+    res.status(500).json({ error: 'Erro ao processar a inscrição.' });
   }
+});
+
+// --- ROTA 4: Iniciar o campeonato e gerar a chave (POST /api/campeonatos/:id/iniciar) ---
+router.post('/:id/iniciar', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const participantes = await db.query('SELECT id, usuario1_id, usuario2_id FROM participantes_campeonato WHERE campeonato_id = $1', [id]);
+        
+        if (participantes.rows.length < 2) {
+            return res.status(400).json({ error: 'Número insuficiente de duplas para iniciar.' });
+        }
+
+        // Lógica para embaralhar e criar os pares da primeira fase
+        const duplasEmbaralhadas = participantes.rows.sort(() => Math.random() - 0.5);
+        const faseNome = 'round_of_64'; // Ajustar conforme número de participantes
+        const jogos = [];
+
+        for (let i = 0; i < duplasEmbaralhadas.length; i += 2) {
+            jogos.push({
+                campeonato_id: id,
+                fase: faseNome,
+                participante1_id: duplasEmbaralhadas[i].id,
+                participante2_id: duplasEmbaralhadas[i+1].id
+            });
+        }
+
+        // Insere todos os jogos da primeira fase no banco de dados
+        const insertQuery = 'INSERT INTO jogos_campeonato (campeonato_id, fase, participante1_id, participante2_id) VALUES ($1, $2, $3, $4)';
+        await db.query('BEGIN');
+        for (const jogo of jogos) {
+            await db.query(insertQuery, [jogo.campeonato_id, jogo.fase, jogo.participante1_id, jogo.participante2_id]);
+        }
+
+        await db.query('UPDATE campeonatos SET status = $1 WHERE id = $2', ['em_andamento', id]);
+        await db.query('COMMIT');
+
+        res.status(200).json({ message: 'Campeonato iniciado e chave gerada!', fase: faseNome, jogos: jogos });
+
+    } catch (error) {
+        await db.query('ROLLBACK');
+        console.error('Erro ao iniciar campeonato:', error);
+        res.status(500).json({ error: 'Erro ao iniciar o campeonato.' });
+    }
 });
 
 
