@@ -44,10 +44,6 @@ router.post('/', async (req, res) => {
 
 // --- ROTA 3: Inscrever uma dupla no campeonato (POST /api/campeonatos/:id/participar) ---
 router.post('/:id/participar', async (req, res) => {
-  // >>> LINHA DE TESTE PARA VERIFICAR VERSÃO DO CÓDIGO <<<
-  console.log(">>> EXECUTANDO A VERSÃO CORRIGIDA DA ROTA DE PARTICIPAR <<<");
-  // ---------------------------------------------------------
-
   const { id } = req.params;
   const { usuario1_id, usuario2_id } = req.body;
 
