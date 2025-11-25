@@ -36,6 +36,10 @@ const usuarioController = {
                 return res.status(401).json({ error: 'Credenciais inválidas.' });
             }
             const usuario = usuarioQuery.rows[0];
+
+            // >>> LINHA DE DIAGNÓSTICO <<<
+            console.log("Objeto 'usuario' recebido do banco:", usuario);
+
             const senhaValida = await bcrypt.compare(senha, usuario.senha);
             if (!senhaValida) {
                 return res.status(401).json({ error: 'Credenciais inválidas.' });
