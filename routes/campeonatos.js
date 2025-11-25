@@ -6,7 +6,7 @@ const router = express.Router();
 
 // Mapeia o nome da fase para a próxima fase
 const proximaFaseMap = {
-    'primeira_fase': 'final', // A próxima fase após a primeira é a final
+    'primeira_fase': 'final',
     'final': 'finalizado'
 };
 
@@ -117,7 +117,7 @@ router.post('/:id/iniciar', async (req, res) => {
             return res.status(400).json({ error: 'Número insuficiente de participantes para iniciar.' });
         }
 
-        const participantesEmbaralhados = participants.rows.sort(() => Math.random() - 0.5);
+        const participantesEmbaralhados = participantes.rows.sort(() => Math.random() - 0.5);
         const faseNome = 'primeira_fase';
         const jogos = [];
 
@@ -148,8 +148,7 @@ router.post('/:id/iniciar', async (req, res) => {
     }
 });
 
-
-// --- ROTA 5: Reportar resultado e avançar fase (LÓGICA CORRIGIDA) ---
+// --- ROTA 5: Reportar resultado e avançar fase (LÓGICA FINAL) ---
 router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
     const { id, jogoId } = req.params;
     const { resultado_participante1, resultado_participante2 } = req.body;
@@ -161,12 +160,12 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
     try {
         await db.query('BEGIN');
 
-        // 1. Busca o jogo para validar e pegar a fase
-        // CORREÇÃO: Força a conversão para texto na consulta para evitar o erro de tipo
-        const jogoQuery = await db.query(
-            'SELECT * FROM jogos_campeonato WHERE id = $1::text AND campeonato_id = $2::text',
-            [jogoId, id]
-        );
+        // CONVERSÃO DOS PARÂMETROS DE TEXTO PARA INTEIRO
+        const campeonatoIdInt = parseInt(id, 10);
+        const jogoIdInt = parseInt(jogoId, 10);
+
+        // 1. Busca o jogo para validar
+        const jogoQuery = await db.query('SELECT * FROM jogos_campeonato WHERE id = $1 AND campeonato_id = $2', [jogoIdInt, campeonatoIdInt]);
         if (jogoQuery.rows.length === 0) {
             await db.query('ROLLBACK');
             return res.status(404).json({ error: 'Jogo não encontrado.' });
@@ -190,13 +189,13 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
         // 3. Atualiza o resultado do jogo
         await db.query(
             'UPDATE jogos_campeonato SET resultado_participante1 = $1, resultado_participante2 = $2, vencedor_id = $3 WHERE id = $4',
-            [resultado1, resultado2, vencedorId, jogoId]
+            [resultado1, resultado2, vencedorId, jogoIdInt]
         );
 
         // 4. Verifica se todos os jogos da fase atual foram concluídos
         const jogosDaFaseQuery = await db.query(
-            'SELECT id, vencedor_id FROM jogos_campeonato WHERE campeonato_id = $1::text AND fase = $2::text',
-            [id, faseAtual]
+            'SELECT id, vencedor_id FROM jogos_campeonato WHERE campeonato_id = $1 AND fase = $2',
+            [campeonatoIdInt, faseAtual]
         );
         
         const todosJogosConcluidos = jogosDaFaseQuery.rows.every(j => j.vencedor_id !== null);
@@ -206,14 +205,9 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
             const proximaFase = proximaFaseMap[faseAtual];
 
             if (proximaFase === 'finalizado') {
-                // LÓGICA DE FINALIZAÇÃO DO CAMPEONATO
-                await finalizarCampeonato(id, vencedoresDaFase[0]);
-            } else if (proximaFase === 'final') {
-                // CORREÇÃO: Para este formato, o vencedor da única fase é o campeão.
-                await finalizarCampeonato(id, vencedoresDaFase[0]);
+                await finalizarCampeonato(campeonatoIdInt, vencedoresDaFase[0]);
             } else {
-                // LÓGICA DE AVANÇO DE FASE
-                await criarProximaFase(id, proximaFase, vencedoresDaFase);
+                await criarProximaFase(campeonatoIdInt, proximaFase, vencedoresDaFase);
             }
         }
 
@@ -227,11 +221,10 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
     }
 });
 
-
 // --- FUNÇÕES DE APOIO PARA A LÓGICA AVANÇADA ---
 
 async function criarProximaFase(campeonatoId, nomeFase, vencedoresIds) {
-    if (vencedoresIds.length < 2) return; // Não há como criar a próxima fase
+    if (vencedoresIds.length < 2) return;
 
     const jogos = [];
     for (let i = 0; i < vencedoresIds.length; i += 2) {
