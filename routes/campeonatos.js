@@ -1,4 +1,4 @@
-// routes/ampeonatos.js
+// routes/campeonatos.js
 
 const express = require('express');
 const db = require('../db');
@@ -10,7 +10,9 @@ const proximaFaseMap = {
     'final': 'finalizado'
 };
 
-// --- ROTA 1: Listar campeonatos abertos (GET /api/ampeonatos) ---
+// --- ROTAS DA API ---
+
+// ROTA 1: Listar campeonatos abertos (GET /api/campeonatos)
 router.get('/', async (req, res) => {
   try {
     const result = await db.query(
@@ -24,7 +26,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// --- ROTA 2: Criar um novo campeonato (POST /api/ampeonatos) ---
+// --- ROTA 2: Criar um novo campeonato (POST /api/campeonatos) ---
 router.post('/', async (req, res) => {
   const { criador_id, nome, modalidade, valor_inscricao, distribuicao_premios } = req.body;
   const taxa_plataforma = 0.10;
@@ -48,7 +50,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// --- ROTA 3: Inscrever uma dupla no campeonato (POST /api/ampeonatos/:id/participar) ---
+// --- ROTA 3: Inscrever uma dupla no campeonato (POST /api/campeonatos/:id/participar) ---
 router.post('/:id/participar', async (req, res) => {
   const { id } = req.params;
   const { usuario1_id, usuario2_id } = req.body;
@@ -107,7 +109,7 @@ router.post('/:id/participar', async (req, res) => {
   }
 });
 
-// --- ROTA 4: Iniciar o campeonato e gerar a chave (POST /api/ampeonatos/:id/iniciar) ---
+// --- ROTA 4: Iniciar o campeonato e gerar a chave (POST /api/campeonatos/:id/iniciar) ---
 router.post('/:id/iniciar', async (req, res) => {
     const { id } = req.params;
     try {
@@ -117,7 +119,7 @@ router.post('/:id/iniciar', async (req, res) => {
             return res.status(400).json({ error: 'Número insuficiente de participantes para iniciar.' });
         }
 
-        const participantesEmbaralhados = participants.rows.sort(() => Math.random() - 0.5);
+        const participantesEmbaralhados = participantes.rows.sort(() => Math.random() - 0.5);
         const faseNome = 'primeira_fase';
         const jogos = [];
 
@@ -142,13 +144,13 @@ router.post('/:id/iniciar', async (req, res) => {
         res.status(200).json({ message: 'Campeonato iniciado e chave gerada!', fase: faseNome, jogos: jogos });
 
     } catch (error) {
-        await db.query('ROLLBACK');
         console.error('Erro ao iniciar campeonato:', error);
         res.status(500).json({ error: 'Erro ao iniciar o campeonato.' });
     }
 });
 
-// --- ROTA 5: Reportar resultado e avançar fase (LÓGICA FINAL) ---
+
+// --- ROTA 5: Reportar resultado e avançar fase (LÓGICA CORRIGIDA) ---
 router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
     const { id, jogoId } = req.params;
     const { resultado_participante1, resultado_participante2 } = req.body;
@@ -202,8 +204,6 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
 
             if (proximaFase === 'finalizado') {
                 await finalizarCampeonato(id, vencedoresDaFase[0]);
-            } else if (proximaFase === 'final') {
-                await finalizarCampeonato(id, vencedoresDaFase[0]);
             } else {
                 await criarProximaFase(id, proximaFase, vencedoresDaFase);
             }
@@ -218,6 +218,7 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
         res.status(500).json({ error: 'Erro ao reportar resultado.' });
     }
 });
+
 
 // --- FUNÇÕES DE APOIO PARA A LÓGICA AVANÇADA ---
 
