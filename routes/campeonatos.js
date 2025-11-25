@@ -117,7 +117,7 @@ router.post('/:id/iniciar', async (req, res) => {
             return res.status(400).json({ error: 'Número insuficiente de participantes para iniciar.' });
         }
 
-        const participantesEmbaralhados = participantes.rows.sort(() => Math.random() - 0.5);
+        const participantesEmbaralhados = participants.rows.sort(() => Math.random() - 0.5);
         const faseNome = 'primeira_fase';
         const jogos = [];
 
@@ -149,17 +149,10 @@ router.post('/:id/iniciar', async (req, res) => {
 });
 
 
-// --- ROTA 5: Reportar resultado e avançar fase (NOVA LÓGICA) ---
+// --- ROTA 5: Reportar resultado e avançar fase (LÓGICA CORRIGIDA) ---
 router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
     const { id, jogoId } = req.params;
     const { resultado_participante1, resultado_participante2 } = req.body;
-
-    // >>> LINHA DE DIAGNÓSTICO <<<
-    console.log(">>> DIAGNÓSTICO: Parâmetros recebidos na rota /:id/jogos/:jogoId/reportar");
-    console.log("ID do Campeonato (req.params.id):", id);
-    console.log("ID do Jogo (req.params.jogoId):", jogoId);
-    console.log("Tipos dos Parâmetros:", typeof id, typeof jogoId);
-    // -------------------------------------------------------------
 
     if (!resultado_participante1 || !resultado_participante2) {
         return res.status(400).json({ error: 'Os resultados dos dois participantes são obrigatórios.' });
@@ -169,7 +162,11 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
         await db.query('BEGIN');
 
         // 1. Busca o jogo para validar e pegar a fase
-        const jogoQuery = await db.query('SELECT * FROM jogos_campeonato WHERE id = $1 AND campeonato_id = $2', [jogoId, id]);
+        // CORREÇÃO: Força a conversão para texto na consulta para evitar o erro de tipo
+        const jogoQuery = await db.query(
+            'SELECT * FROM jogos_campeonato WHERE id = $1::text AND campeonato_id = $2::text',
+            [jogoId, id]
+        );
         if (jogoQuery.rows.length === 0) {
             await db.query('ROLLBACK');
             return res.status(404).json({ error: 'Jogo não encontrado.' });
@@ -198,7 +195,7 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
 
         // 4. Verifica se todos os jogos da fase atual foram concluídos
         const jogosDaFaseQuery = await db.query(
-            'SELECT id, vencedor_id FROM jogos_campeonato WHERE campeonato_id = $1 AND fase = $2',
+            'SELECT id, vencedor_id FROM jogos_campeonato WHERE campeonato_id = $1::text AND fase = $2::text',
             [id, faseAtual]
         );
         
