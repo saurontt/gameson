@@ -1,4 +1,5 @@
 // src/controllers/adminController.js
+
 const db = require('../db');
 
 const adminController = {

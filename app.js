@@ -8,6 +8,7 @@ const fs = require('fs'); // Módulo para interagir com o sistema de arquivos
 const feedRoutes = require('./routes/feed');
 const disputasRoutes = require('./routes/disputas');
 const campeonatosRoutes = require('./routes/campeonatos');
+const adminRoutes = require('./routes/adminRoutes'); // <-- LINHA NOVA ADICIONADA
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,6 +23,7 @@ app.use(express.json());
 app.use('/api/feed', feedRoutes);
 app.use('/api/disputas', disputasRoutes);
 app.use('/api/campeonatos', campeonatosRoutes);
+app.use('/api/admin', adminRoutes); // <-- LINHA NOVA ADICIONADA
 
 // Rota de saúde para o Render
 app.get('/', (req, res) => {
