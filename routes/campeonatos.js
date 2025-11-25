@@ -117,7 +117,7 @@ router.post('/:id/iniciar', async (req, res) => {
             return res.status(400).json({ error: 'Número insuficiente de participantes para iniciar.' });
         }
 
-        const participantesEmbaralhados = participantes.rows.sort(() => Math.random() - 0.5);
+        const participantesEmbaralhados = participants.rows.sort(() => Math.random() - 0.5);
         const faseNome = 'primeira_fase';
         const jogos = [];
 
@@ -148,6 +148,7 @@ router.post('/:id/iniciar', async (req, res) => {
     }
 });
 
+
 // --- ROTA 5: Reportar resultado e avançar fase (LÓGICA FINAL) ---
 router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
     const { id, jogoId } = req.params;
@@ -160,12 +161,25 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
     try {
         await db.query('BEGIN');
 
-        // CONVERSÃO DOS PARÂMETROS DE TEXTO PARA INTEIRO
+        // CONVERSÃO DOS PARÂMETROS PARA INTEIRO
         const campeonatoIdInt = parseInt(id, 10);
         const jogoIdInt = parseInt(jogoId, 10);
 
-        // 1. Busca o jogo para validar
-        const jogoQuery = await db.query('SELECT * FROM jogos_campeonato WHERE id = $1 AND campeonato_id = $2', [jogoIdInt, campeonatoIdInt]);
+        // LOG MAIS DETALHADO PARA DIAGNÓSTICO
+        console.log(">>> DIAGNÓSTICO: Reportando resultado do jogo.");
+        console.log("URL Params - id:", id, "jogoId:", jogoId);
+        console.log("Params Convertidos - campeonatoIdInt:", campeonatoIdInt, "jogoIdInt:", jogoIdInt);
+        console.log("Corpo da Requisição - resultado_participante1:", resultado_participante1, "resultado_participante2:", resultado_participante2);
+        console.log("SQL Query que será executada: SELECT * FROM jogos_campeonato WHERE id = " + jogoIdInt + " AND campeonato_id = " + campeonatoIdInt);
+        // -------------------------------------------------------------
+
+        // PEQUENO ATRASO PARA DAR TEMPO AO BANCO DE DADOS
+        await new Promise(resolve => setTimeout(resolve, 500)); // Aguarda 500ms
+
+        const jogoQuery = await db.query(
+            'SELECT * FROM jogos_campeonato WHERE id = $1 AND campeonato_id = $2',
+            [jogoIdInt, campeonatoIdInt]
+        );
         if (jogoQuery.rows.length === 0) {
             await db.query('ROLLBACK');
             return res.status(404).json({ error: 'Jogo não encontrado.' });
@@ -221,6 +235,7 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
     }
 });
 
+
 // --- FUNÇÕES DE APOIO PARA A LÓGICA AVANÇADA ---
 
 async function criarProximaFase(campeonatoId, nomeFase, vencedoresIds) {
@@ -250,26 +265,22 @@ async function finalizarCampeonato(campeonatoId, vencedorId) {
     const taxa = poteTotal * campeonato.taxa_plataforma;
     const potePremios = poteTotal - taxa;
 
-    // Pega o ID do usuário vencedor a partir do ID do participante
     const participanteQuery = await db.query('SELECT usuario_id FROM participantes_campeonato WHERE id = $1', [vencedorId]);
     const vencedorUsuarioId = participanteQuery.rows[0].usuario_id;
     
     const premioPrimeiro = potePremios * campeonato.distribuicao_premios['1'];
 
-    // Paga o vencedor
     await db.query('UPDATE usuarios SET saldo = saldo + $1 WHERE id = $2', [premioPrimeiro, vencedorUsuarioId]);
     await db.query(
         'INSERT INTO transacoes (usuario_id, tipo, valor, descricao, campeonato_id) VALUES ($1, $2, $3, $4, $5)',
         [vencedorUsuarioId, 'ganho_campeonato', premioPrimeiro, `Vitória no campeonato ${campeonato.nome}`, campeonatoId]
     );
     
-    // Registra a comissão da plataforma
     await db.query(
-        'INSERT INTO transacoes (usuario_id, tipo, valor, descricao) VALUES ($1, $2, $3, $4)',
+        'INSERT INTO transacoes (usuario_id, tipo, valor, descricao) VALUES ($1, $2, $3, $4, $5)',
         [null, 'comissao_plataforma', taxa, `Comissão do campeonato ${campeonato.nome}`]
     );
 
-    // Finaliza o campeonato
     await db.query('UPDATE campeonatos SET status = $1, resultado_final = $2 WHERE id = $3', ['finalizado', { "1": vencedorUsuarioId }, campeonatoId]);
     console.log(`Campeonato ${campeonatoId} finalizado! Vencedor: Usuário ${vencedorUsuarioId}`);
 }
