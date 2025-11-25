@@ -16,7 +16,6 @@ const proximaFaseMap = {
 // --- ROTA 1: Listar campeonatos abertos (GET /api/campeonatos) ---
 router.get('/', async (req, res) => {
   try {
-    // AJUSTE: Usando o seu status 'aberto_para_inscricao'
     const result = await db.query(
       'SELECT * FROM campeonatos WHERE status = $1 ORDER BY data_criacao DESC',
       ['aberto_para_inscricao']
@@ -30,7 +29,6 @@ router.get('/', async (req, res) => {
 
 // --- ROTA 2: Criar um novo campeonato (POST /api/campeonatos) ---
 router.post('/', async (req, res) => {
-  // AJUSTE: O body agora usa 'distribuicao_premios' no nível raiz, conforme sua tabela
   const { criador_id, nome, descricao, modalidade, esporte, valor_inscricao, formato, distribuicao_premios, configuracoes } = req.body;
   const taxa_plataforma = 0.10;
 
@@ -65,7 +63,6 @@ router.post('/:id/participar', async (req, res) => {
   try {
     await db.query('BEGIN');
 
-    // AJUSTE: Usando o seu status 'aberto_para_inscricao'
     const campeonatoQuery = await db.query('SELECT * FROM campeonatos WHERE id = $1', [id]);
     if (campeonatoQuery.rows.length === 0 || campeonatoQuery.rows[0].status !== 'aberto_para_inscricao') {
       await db.query('ROLLBACK');
@@ -127,7 +124,6 @@ router.post('/:id/iniciar', async (req, res) => {
             return res.status(400).json({ error: 'Número de participantes deve ser par e maior ou igual a 4 para iniciar.' });
         }
 
-        // Lógica para definir a fase inicial com base no número de participantes
         let faseNome = 'final';
         if (participantes.length > 2) faseNome = 'semifinal';
         if (participantes.length > 4) faseNome = 'quartas';
@@ -204,7 +200,6 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
             [resultado1, resultado2, vencedorId, jogoIdInt]
         );
 
-        // --- NOVA LÓGICA: PRÊMIO PROGRESSIVO POR ELIMINAÇÃO ---
         const campeonatoQuery = await db.query('SELECT configuracoes FROM campeonatos WHERE id = $1', [campeonatoIdInt]);
         const config = campeonatoQuery.rows[0].configuracoes;
         const premiacaoProgressiva = config.premiacao_progressiva;
@@ -223,7 +218,6 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
 
             await db.query('UPDATE campeonatos SET pote_total = pote_total - $1 WHERE id = $2', [premioEliminacao, campeonatoIdInt]);
         }
-        // --- FIM DA NOVA LÓGICA ---
 
         const jogosDaFaseQuery = await db.query(
             'SELECT id, vencedor_id FROM jogos_campeonato WHERE campeonato_id = $1 AND fase = $2',
@@ -285,9 +279,17 @@ async function finalizarCampeonato(campeonatoId, vencedoresFinais) {
     const campeonatoQuery = await db.query('SELECT * FROM campeonatos WHERE id = $1', [campeonatoId]);
     const campeonato = campeonatoQuery.rows[0];
     
-    // AJUSTE: Lendo da sua coluna 'distribuicao_premios'
+    // LÓGICA CORRIGIDA: Buscar a taxa de plataforma dinamicamente
+    const taxaConfigQuery = await db.query('SELECT valor FROM configuracoes_sistema WHERE chave = $1', ['taxa_plataforma']);
+    if (taxaConfigQuery.rows.length === 0) {
+        throw new Error("Configuração 'taxa_plataforma' não encontrada no banco de dados.");
+    }
+    const taxaPlataformaDecimal = parseFloat(taxaConfigQuery.rows[0].valor);
+
     const distribuicaoPremios = campeonato.distribuicao_premios;
-    const potePremios = parseFloat(campeonato.pote_total);
+    const poteTotal = parseFloat(campeonato.pote_total);
+    const taxa = poteTotal * taxaPlataformaDecimal;
+    const potePremios = poteTotal - taxa;
 
     const vencedorFinalQuery = await db.query('SELECT usuario1_id, usuario2_id FROM participantes_campeonato WHERE id = $1', [vencedoresFinais[0]]);
     const viceFinalQuery = await db.query('SELECT usuario1_id, usuario2_id FROM participantes_campeonato WHERE id = $1', [vencedoresFinais[1]]);
@@ -305,6 +307,12 @@ async function finalizarCampeonato(campeonatoId, vencedoresFinais) {
     await pagarPremio(viceFinal.usuario1_id, viceFinal.usuario2_id, premioSegundo / 2, campeonatoId, 'ganho_campeonato_2_lugar');
     await pagarPremio(terceiroLugar.usuario1_id, terceiroLugar.usuario2_id, premioTerceiro / 2, campeonatoId, 'ganho_campeonato_3_lugar');
 
+    // Registra a comissão da plataforma (transação)
+    await db.query(
+        'INSERT INTO transacoes (usuario_id, tipo, valor, descricao) VALUES ($1, $2, $3, $4)',
+        [null, 'comissao_plataforma', taxa, `Comissão do campeonato ${campeonato.nome}`]
+    );
+
     const resultadoFinalJson = JSON.stringify({
         "1": [vencedorFinal.usuario1_id, vencedorFinal.usuario2_id],
         "2": [viceFinal.usuario1_id, viceFinal.usuario2_id],
@@ -312,7 +320,7 @@ async function finalizarCampeonato(campeonatoId, vencedoresFinais) {
     });
 
     await db.query('UPDATE campeonatos SET status = $1, resultado_final = $2 WHERE id = $3', ['finalizado', resultadoFinalJson, campeonatoId]);
-    console.log(`Campeonato ${campeonatoId} finalizado!`);
+    console.log(`Campeonato ${campeonatoId} finalizado! Taxa de ${taxaPlataformaDecimal * 100}% aplicada.`);
 }
 
 async function pagarPremio(usuario1Id, usuario2Id, valorPorJogador, campeonatoId, tipoTransacao) {
