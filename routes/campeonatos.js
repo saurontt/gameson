@@ -6,7 +6,6 @@ const router = express.Router();
 
 // Mapeia o nome da fase para a próxima fase (SIMPLIFICADO)
 const proximaFaseMap = {
-    'oitavas': 'quartas',
     'quartas': 'semifinal',
     'semifinal': 'final',
     'final': 'finalizado'
@@ -157,7 +156,7 @@ router.post('/:id/iniciar', async (req, res) => {
     }
 });
 
-// --- ROTA 5: Listar jogos de um campeonato (GET /api/campeonatos/:id/jogos) ---
+// --- ROTA 5: Listar jogos de um campeonato (NOVA) ---
 router.get('/:id/jogos', async (req, res) => {
     const { id } = req.params;
     const campeonatoIdInt = parseInt(id, 10);
@@ -176,7 +175,7 @@ router.get('/:id/jogos', async (req, res) => {
 });
 
 
-// --- ROTA 6: Reportar resultado e avançar fase (LÓGICA FINAL E SIMPLIFICADA) ---
+// --- ROTA 6: Reportar resultado e avançar fase (LÓGICA FINAL) ---
 router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
     const { id, jogoId } = req.params;
     const { resultado_participante1, resultado_participante2 } = req.body;
@@ -210,7 +209,7 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
             perdedorId = jogo.participante1_id;
         } else {
             await db.query('ROLLBACK');
-            return res.status(400).json({ error: 'Empates não são permitidos.' });
+            return res.status(400).json({ error: 'Empates não são permitidos nesta fase.' });
         }
 
         await db.query(
@@ -218,6 +217,7 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
             [resultado1, resultado2, vencedorId, jogoIdInt]
         );
 
+        // Lógica de prêmio por eliminação (se houver)
         const campeonatoQuery = await db.query('SELECT configuracoes FROM campeonatos WHERE id = $1', [campeonatoIdInt]);
         const config = campeonatoQuery.rows[0].configuracoes;
         const premiacaoProgressiva = config.premiacao_progressiva;
@@ -232,6 +232,7 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
             await db.query('UPDATE campeonatos SET pote_total = pote_total - $1 WHERE id = $2', [premioEliminacao, campeonatoIdInt]);
         }
 
+        // Lógica para avançar de fase
         const jogosDaFaseQuery = await db.query(
             'SELECT id, vencedor_id FROM jogos_campeonato WHERE campeonato_id = $1 AND fase = $2',
             [campeonatoIdInt, faseAtual]
@@ -260,7 +261,7 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
     }
 });
 
-// --- FUNÇÕES DE APOIO (SIMPLIFICADAS) ---
+// --- FUNÇÕES DE APOIO ---
 
 async function criarProximaFase(campeonatoId, nomeFase, vencedoresIds) {
     if (vencedoresIds.length < 2) return;
@@ -294,12 +295,6 @@ async function finalizarCampeonato(campeonatoId, vencedoresFinais) {
     const poteTotal = parseFloat(campeonato.pote_total);
     const taxa = poteTotal * taxaPlataformaDecimal;
     const potePremios = poteTotal - taxa;
-
-    // CORREÇÃO: Verificar se há pelo menos 2 vencedores antes de prosseguir
-    if (!vencedoresFinais || vencedoresFinais.length < 2) {
-        console.error('Tentando finalizar campeonato com menos de 2 vencedores.');
-        return;
-    }
 
     const vencedorFinalQuery = await db.query('SELECT usuario_id FROM participantes_campeonato WHERE id = $1', [vencedoresFinais[0]]);
     const viceFinalQuery = await db.query('SELECT usuario_id FROM participantes_campeonato WHERE id = $1', [vencedoresFinais[1]]);
