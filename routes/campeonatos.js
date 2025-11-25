@@ -158,7 +158,26 @@ router.post('/:id/iniciar', async (req, res) => {
     }
 });
 
-// --- ROTA 5: Reportar resultado e avançar fase (LÓGICA FINAL) ---
+// --- ROTA 5: Listar jogos de um campeonato (GET /api/campeonatos/:id/jogos) ---
+router.get('/:id/jogos', async (req, res) => {
+    const { id } = req.params;
+    const campeonatoIdInt = parseInt(id, 10);
+
+    try {
+        const jogosQuery = await db.query(
+            'SELECT * FROM jogos_campeonato WHERE campeonato_id = $1 ORDER BY id',
+            [campeonatoIdInt]
+        );
+        res.status(200).json(jogosQuery.rows);
+
+    } catch (error) {
+        console.error('Erro ao listar jogos:', error);
+        res.status(500).json({ error: 'Erro ao listar os jogos.' });
+    }
+});
+
+
+// --- ROTA 6: Reportar resultado e avançar fase (LÓGICA FINAL) ---
 router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
     const { id, jogoId } = req.params;
     const { resultado_participante1, resultado_participante2 } = req.body;
