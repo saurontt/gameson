@@ -1,12 +1,7 @@
-// src/middleware/adminMiddleware.js
-
-const db = require('../db'); // Usando a conexão com o banco diretamente
+const db = require('../db');
 
 const adminMiddleware = async (req, res, next) => {
     try {
-        // O ID do usuário logado deve vir de um middleware de autenticação (ex: req.usuarioId)
-        // Se você não tiver, precisará implementar a autenticação primeiro.
-        // Por ora, vou assumir que req.usuarioId existe.
         const usuarioId = req.usuarioId; 
 
         if (!usuarioId) {
@@ -19,7 +14,7 @@ const adminMiddleware = async (req, res, next) => {
             return res.status(403).json({ error: 'Acesso negado. Ação permitida apenas para administradores.' });
         }
 
-        next(); // É um admin, pode continuar
+        next();
     } catch (error) {
         console.error('Erro no middleware de admin:', error);
         res.status(500).json({ error: 'Erro interno no servidor.' });
