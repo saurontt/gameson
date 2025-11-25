@@ -6,9 +6,8 @@ const path = require('path');
 // Importa as rotas
 const feedRoutes = require('./routes/feed');
 const disputasRoutes = require('./routes/disputas');
-const campeonatosRoutes = require('./routes/campeonatos');
-const usuariosRoutes = require('./routes/usuarios'); // <-- LINHA NOVA ADICIONADA
-const adminRoutes = require('./routes/adminRoutes'); // <-- LINHA NOVA ADICIONADA
+const campeonatosRoutes = require('./routes/campeonatos'); // Rota antiga
+const adminRoutes = require('./routes/adminRoutes'); // Nova rota de admin
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,8 +22,7 @@ app.use(express.json());
 app.use('/api/feed', feedRoutes);
 app.use('/api/disputas', disputasRoutes);
 app.use('/api/campeonatos', campeonatosRoutes);
-app.use('/api/usuarios', usuariosRoutes); // <-- LINHA NOVA ADICIONADA
-app.use('/api/admin', adminRoutes); // <-- LINHA NOVA ADICIONADA
+app.use('/api/admin', adminRoutes); // <<< NOVA ROTA ADICIONADA AQUI
 
 // Rota de saúde para o Render
 app.get('/', (req, res) => {
