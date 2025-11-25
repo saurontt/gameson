@@ -39,7 +39,8 @@ router.post('/', async (req, res) => {
   }
 });
 
-// ROTA 2: Listar desafios com status 'aguardando_aceite' (GET /api/disputas)
+// ROTA 2: Listar desafios com status 'aguardando_aceite' (GET /api/disputas/abertos)
+// CORREÇÃO: A query agora usa LEFT JOIN para funcionar com disputas antigas
 router.get('/abertos', async (req, res) => {
   try {
     const query = `
@@ -54,7 +55,7 @@ router.get('/abertos', async (req, res) => {
         disputas d
       JOIN
         usuarios u_criador ON d.criador_id = u_criador.id
-      JOIN
+      LEFT JOIN -- CORREÇÃO: Usar LEFT JOIN para não falhar se desafiado_id for NULL
         usuarios u_desafiado ON d.desafiado_id = u_desafiado.id
       WHERE
         d.status = 'aguardando_aceite'
@@ -90,8 +91,8 @@ router.post('/:id/aceitar', async (req, res) => {
       return res.status(404).json({ error: 'Desafio não encontrado ou você não é o desafiado.' });
     }
     if (disputaQuery.rows[0].status !== 'aguardando_aceite') {
-        await db.query('ROLLBACK');
-        return res.status(400).json({ error: 'Este desafio já foi respondido.' });
+      await db.query('ROLLBACK');
+      return res.status(400).json({ error: 'Este desafio já foi respondido.' });
     }
 
     // 2. Atualiza a disputa com o valor do desafiado e muda o status
@@ -115,7 +116,6 @@ router.post('/:id/aceitar', async (req, res) => {
     res.status(500).json({ error: 'Erro ao aceitar o desafio.' });
   }
 });
-
 
 // ROTA 4: Finalizar uma disputa por consenso (POST /api/disputas/:id/finalizar)
 router.post('/:id/finalizar', async (req, res) => {
@@ -165,7 +165,6 @@ router.post('/:id/finalizar', async (req, res) => {
     );
 
     await db.query('COMMIT');
-
     res.status(200).json({ message: 'Disputa finalizada com sucesso!', premio: valorPremio });
 
   } catch (error) {
@@ -202,7 +201,6 @@ router.post('/:id/contestar', async (req, res) => {
     }
 
     await db.query('COMMIT');
-
     res.status(200).json({ message: 'Disputa contestada com sucesso! A análise será feita pela plataforma.' });
 
   } catch (error) {
@@ -211,7 +209,6 @@ router.post('/:id/contestar', async (req, res) => {
     res.status(500).json({ error: 'Erro ao contestar disputa.' });
   }
 });
-
 
 // ROTA DE TESTE: Criar um novo usuário (POST /api/disputas/usuarios)
 router.post('/usuarios', async (req, res) => {
@@ -232,6 +229,5 @@ router.post('/usuarios', async (req, res) => {
     res.status(500).json({ error: 'Erro ao criar usuário.' });
   }
 });
-
 
 module.exports = router;
