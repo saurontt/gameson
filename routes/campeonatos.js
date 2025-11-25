@@ -52,7 +52,7 @@ router.post('/', async (req, res) => {
 // --- ROTA 3: Inscrever um USUÁRIO no campeonato (POST /api/campeonatos/:id/participar) ---
 router.post('/:id/participar', async (req, res) => {
   const { id } = req.params;
-  const { usuario_id } = req.body; // Mudança: Agora recebe apenas um usuario_id
+  const { usuario_id } = req.body;
 
   if (!id || !usuario_id) {
     return res.status(400).json({ error: 'ID do campeonato e ID do usuário são obrigatórios.' });
@@ -68,7 +68,6 @@ router.post('/:id/participar', async (req, res) => {
     }
     const valorInscricao = parseFloat(campeonatoQuery.rows[0].valor_inscricao);
 
-    // Mudança: Verifica se o usuário já está inscrito
     const participanteExistente = await db.query(
       'SELECT id FROM participantes_campeonato WHERE campeonato_id = $1 AND usuario_id = $2',
       [id, usuario_id]
@@ -90,7 +89,6 @@ router.post('/:id/participar', async (req, res) => {
       [usuario_id, 'inscricao_campeonato', -valorInscricao, `Inscrição no campeonato ${campeonatoQuery.rows[0].nome}`, id]
     );
     
-    // Mudança: Inscreve o usuário individualmente
     await db.query(
       'INSERT INTO participantes_campeonato (campeonato_id, usuario_id) VALUES ($1, $2)',
       [id, usuario_id]
@@ -106,6 +104,54 @@ router.post('/:id/participar', async (req, res) => {
     console.error('Erro ao inscrever usuário:', error);
     res.status(500).json({ error: 'Erro ao processar a inscrição.' });
   }
+});
+
+// --- ROTA 4: Iniciar o campeonato e gerar a chave (POST /api/campeonatos/:id/iniciar) ---
+router.post('/:id/iniciar', async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query('BEGIN');
+
+        // Mudança: Busca os participantes individuais
+        const participantesQuery = await db.query('SELECT id FROM participantes_campeonato WHERE campeonato_id = $1 ORDER BY id', [id]);
+        const participantes = participantesQuery.rows;
+        
+        if (participantes.length < 4 || participantes.length % 2 !== 0) {
+            await db.query('ROLLBACK');
+            return res.status(400).json({ error: 'Número de participantes deve ser par e maior ou igual a 4 para iniciar.' });
+        }
+
+        let faseNome = 'final';
+        if (participantes.length > 2) faseNome = 'semifinal';
+        if (participantes.length > 4) faseNome = 'quartas';
+        if (participantes.length > 8) faseNome = 'oitavas';
+
+        // Mudança: Cria jogos emparelhando os participantes individuais
+        const jogos = [];
+        for (let i = 0; i < participantes.length; i += 2) {
+            jogos.push({
+                campeonato_id: id,
+                fase: faseNome,
+                participante1_id: participantes[i].id, // ID do participante 1
+                participante2_id: participantes[i+1].id // ID do participante 2
+            });
+        }
+
+        const insertQuery = 'INSERT INTO jogos_campeonato (campeonato_id, fase, participante1_id, participante2_id) VALUES ($1, $2, $3, $4) RETURNING id';
+        for (const jogo of jogos) {
+            await db.query(insertQuery, [jogo.campeonato_id, jogo.fase, jogo.participante1_id, jogo.participante2_id]);
+        }
+
+        await db.query('UPDATE campeonatos SET status = $1 WHERE id = $2', ['em_andamento', id]);
+        await db.query('COMMIT');
+
+        res.status(200).json({ message: 'Campeonato iniciado e chave gerada!', fase: faseNome, jogos: jogos });
+
+    } catch (error) {
+        await db.query('ROLLBACK');
+        console.error('Erro ao iniciar campeonato:', error);
+        res.status(500).json({ error: 'Erro ao iniciar o campeonato.' });
+    }
 });
 
 module.exports = router;
