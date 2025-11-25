@@ -1,271 +1,216 @@
-// routes/disputas.js - Lógica completa para Disputas Pessoais
+// routes/disputas.js - Lógica para Disputas Pessoais Avançadas
 const express = require('express');
 const db = require('../db');
-
 const router = express.Router();
-
-// --- FUNÇÕES AUXILIARES ---
-
-// Busca o nome de um usuário pelo ID
-async function getUserNameById(usuarioId) {
-  if (!usuarioId) return null;
-  const result = await db.query('SELECT nome FROM usuarios WHERE id = $1', [usuarioId]);
-  return result.rows[0] ? result.rows[0].nome : 'Usuário Desconhecido';
-}
 
 // --- ROTAS DA API ---
 
-// ROTA 1: Criar uma nova disputa (POST /api/disputas)
+// ROTA 1: Criar um novo desafio (POST /api/disputas)
+// O criador propõe um valor. O desafiado ainda aceitou.
 router.post('/', async (req, res) => {
-  const { criador_id, titulo, valor_aposta, tipo = 'individual' } = req.body;
+  const { criador_id, desafiado_id, titulo, valor_aposta_criador } = req.body;
 
-  if (!criador_id || !titulo || !valor_aposta) {
+  if (!criador_id || !desafiado_id || !titulo || !valor_aposta_criador) {
     return res.status(400).json({ error: 'Campos obrigatórios faltando.' });
   }
 
   try {
     await db.query('BEGIN');
 
+    // 1. Insere a nova disputa com o valor do criador
     const newDisputa = await db.query(
-      'INSERT INTO disputas (criador_id, titulo, valor_aposta, tipo) VALUES ($1, $2, $3, $4) RETURNING *',
-      [criador_id, titulo, valor_aposta, tipo]
+      'INSERT INTO disputas (criador_id, desafiado_id, titulo, valor_aposta_criador, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [criador_id, desafiado_id, titulo, valor_aposta_criador, 'aguardando_aceite']
     );
 
-    const disputaId = newDisputa.rows[0].id;
-
-    await db.query(
-      'INSERT INTO participantes_disputa (disputa_id, usuario_id, status_participante) VALUES ($1, $2, $3)',
-      [disputaId, criador_id, 'aceito']
-    );
-
+    // 2. Cria a transação da aposta do criador (valor fica "congelado")
     await db.query(
       'INSERT INTO transacoes (usuario_id, tipo, valor, descricao, disputa_id) VALUES ($1, $2, $3, $4, $5)',
-      [criador_id, 'aposta', -valor_aposta, `Aposta na disputa "${titulo}"`, disputaId]
+      [criador_id, 'aposta_desafio', -valor_aposta_criador, `Aposta no desafio "${titulo}"`, newDisputa.rows[0].id]
     );
 
     await db.query('COMMIT');
-
     res.status(201).json(newDisputa.rows[0]);
 
   } catch (error) {
     await db.query('ROLLBACK');
-    console.error('Erro ao criar disputa:', error);
-    res.status(500).json({ error: 'Erro ao criar a disputa.' });
+    console.error('Erro ao criar desafio:', error);
+    res.status(500).json({ error: 'Erro ao criar o desafio.' });
   }
 });
 
-// ROTA 2: Listar disputas abertas para o feed (GET /api/disputas)
-router.get('/', async (req, res) => {
+// ROTA 2: Listar desafios com status 'aguardando_aceite' (GET /api/disputas)
+router.get('/abertos', async (req, res) => {
   try {
     const query = `
       SELECT
         d.id,
         d.titulo,
-        d.valor_aposta,
-        d.data_hora_termino,
-        d.tipo,
-        u.nome AS criador_nome,
-        COUNT(pd.usuario_id) - 1 as num_participantes
+        d.valor_aposta_criador,
+        d.data_criacao,
+        u_criador.nome AS criador_nome,
+        u_desafiado.nome AS desafiado_nome
       FROM
         disputas d
       JOIN
-        usuarios u ON d.criador_id = u.id
-      LEFT JOIN
-        participantes_disputa pd ON d.id = pd.disputa_id AND pd.status_participante = 'aceito'
+        usuarios u_criador ON d.criador_id = u_criador.id
+      JOIN
+        usuarios u_desafiado ON d.desafiado_id = u_desafiado.id
       WHERE
-        d.status = 'aguardando'
-      GROUP BY
-        d.id, d.titulo, d.valor_aposta, d.data_hora_termino, d.tipo, u.nome
+        d.status = 'aguardando_aceite'
       ORDER BY
         d.data_criacao DESC
     `;
-
     const result = await db.query(query);
     res.status(200).json(result.rows);
-
   } catch (error) {
-    console.error('Erro ao buscar disputas no feed:', error);
-    res.status(500).json({ error: 'Erro ao buscar disputas.' });
+    console.error('Erro ao buscar desafios abertos:', error);
+    res.status(500).json({ error: 'Erro ao buscar desafios.' });
   }
 });
 
-// ROTA 3: Convidar usuários para uma disputa (POST /api/disputas/:id/convidar)
-router.post('/:id/convidar', async (req, res) => {
-  const { id } = req.params;
-  const { usuarios_ids } = req.body;
-
-  if (!id || !usuarios_ids || !Array.isArray(usuarios_ids)) {
-    return res.status(400).json({ error: 'ID da disputa e lista de usuários são obrigatórios.' });
-  }
-
-  try {
-    const disputa = await db.query('SELECT criador_id FROM disputas WHERE id = $1', [id]);
-    if (disputa.rows.length === 0) {
-      return res.status(404).json({ error: 'Disputa não encontrada.' });
-    }
-
-    const values = usuarios_ids.map(usuarioId => `(${id}, ${usuarioId}, 'convidado')`).join(',');
-    const insertQuery = `INSERT INTO participantes_disputa (disputa_id, usuario_id, status_participante) VALUES ${values}`;
-
-    await db.query(insertQuery);
-    res.status(201).json({ message: 'Convites enviados com sucesso!' });
-
-  } catch (error) {
-    console.error('Erro ao enviar convites:', error);
-    res.status(500).json({ error: 'Erro ao enviar convites.' });
-  }
-});
-
-
-// ROTA 4: Aceitar um convite para uma disputa (POST /api/disputas/:id/aceitar)
+// ROTA 3: Aceitar um desafio e contra-apostar (POST /api/disputas/:id/aceitar)
+// O desafiado aceita e define seu próprio valor de aposta.
 router.post('/:id/aceitar', async (req, res) => {
   const { id } = req.params;
-  const { usuario_id } = req.body;
+  const { usuario_id, valor_aposta_desafiado } = req.body;
 
-  if (!id || !usuario_id) {
-    return res.status(400).json({ error: 'ID da disputa e ID do usuário são obrigatórios.' });
+  if (!id || !usuario_id || !valor_aposta_desafiado) {
+    return res.status(400).json({ error: 'ID da disputa, ID do usuário e valor da aposta são obrigatórios.' });
   }
 
   try {
-    const participante = await db.query(
-      'SELECT * FROM participantes_disputa WHERE disputa_id = $1 AND usuario_id = $2',
-      [id, usuario_id]
-    );
-
-    if (participante.rows.length === 0) {
-      return res.status(404).json({ error: 'Convite não encontrado.' });
-    }
-
-    if (participante.rows[0].status_participante !== 'convidado') {
-      return res.status(400).json({ error: 'Este convite já foi respondido.' });
-    }
-
-    const disputa = await db.query('SELECT valor_aposta FROM disputas WHERE id = $1', [id]);
-    const valorAposta = disputa.rows[0].valor_aposta;
-
     await db.query('BEGIN');
 
+    // 1. Busca a disputa para validar
+    const disputaQuery = await db.query('SELECT * FROM disputas WHERE id = $1 AND desafiado_id = $2', [id, usuario_id]);
+    if (disputaQuery.rows.length === 0) {
+      await db.query('ROLLBACK');
+      return res.status(404).json({ error: 'Desafio não encontrado ou você não é o desafiado.' });
+    }
+    if (disputaQuery.rows[0].status !== 'aguardando_aceite') {
+        await db.query('ROLLBACK');
+        return res.status(400).json({ error: 'Este desafio já foi aceito ou recusado.' });
+    }
+
+    // 2. Atualiza a disputa com o valor do desafiado e muda o status
     await db.query(
-      'UPDATE participantes_disputa SET status_participante = $1 WHERE disputa_id = $2 AND usuario_id = $3',
-      ['aceito', id, usuario_id]
+      'UPDATE disputas SET valor_aposta_desafiado = $1, status = $2 WHERE id = $3',
+      [valor_aposta_desafiado, 'aguardando', id]
     );
 
+    // 3. Cria a transação da aposta do desafiado
     await db.query(
       'INSERT INTO transacoes (usuario_id, tipo, valor, descricao, disputa_id) VALUES ($1, $2, $3, $4, $5)',
-      [usuario_id, 'aposta', -valorAposta, `Aposta na disputa ID ${id}`, id]
+      [usuario_id, 'aposta_desafio', -valor_aposta_desafiado, `Aposta no desafio ID ${id}`, id]
     );
 
     await db.query('COMMIT');
-
-    res.status(200).json({ message: 'Disputa aceita com sucesso!' });
+    res.status(200).json({ message: 'Desafio aceito com sucesso! A aposta está ativa.' });
 
   } catch (error) {
     await db.query('ROLLBACK');
-    console.error('Erro ao aceitar disputa:', error);
-    res.status(500).json({ error: 'Erro ao aceitar disputa.' });
+    console.error('Erro ao aceitar desafio:', error);
+    res.status(500).json({ error: 'Erro ao aceitar o desafio.' });
   }
 });
 
-
-// ROTA 5: Finalizar uma disputa por consenso (POST /api/disputas/:id/finalizar)
+// ROTA 4: Finalizar uma disputa por consenso (POST /api/disputas/:id/finalizar)
 router.post('/:id/finalizar', async (req, res) => {
-  const { id } = req.params;
-  const { vencedor_usuario_id } = req.body;
+    const { id } = req.params;
+    const { vencedor_usuario_id } = req.body;
 
-  if (!id || !vencedor_usuario_id) {
-    return res.status(400).json({ error: 'ID da disputa e ID do vencedor são obrigatórios.' });
-  }
-
-  try {
-    const disputa = await db.query('SELECT valor_aposta FROM disputas WHERE id = $1', [id]);
-    if (disputa.rows.length === 0) return res.status(404).json({ error: 'Disputa não encontrada.' });
-
-    const valorTotal = parseFloat(disputa.rows[0].valor_aposta) * 2;
-    const taxa = await db.query('SELECT valor FROM configuracoes_plataforma WHERE chave = $1', ['taxa_disputa_pessoal']);
-    const valorTaxa = valorTotal * (parseFloat(taxa.rows[0].valor) / 100);
-    const valorPremio = valorTotal - valorTaxa;
-
-    await db.query('BEGIN');
-
-    await db.query(
-      'INSERT INTO resultados_disputa (disputa_id, vencedor_usuario_id, status_final) VALUES ($1, $2, $3)',
-      [id, vencedor_usuario_id, 'consenso']
-    );
-
-    await db.query('UPDATE disputas SET status = $1 WHERE id = $2', ['finalizada', id]);
-
-    await db.query(
-      'UPDATE usuarios SET saldo = saldo + $1 WHERE id = $2',
-      [valorPremio, vencedor_usuario_id]
-    );
-
-    await db.query(
-      'INSERT INTO transacoes (usuario_id, tipo, valor, descricao, disputa_id) VALUES ($1, $2, $3, $4, $5)',
-      [vencedor_usuario_id, 'ganho', valorPremio, `Ganho na disputa ID ${id}`, id]
-    );
-
-    await db.query(
-      'INSERT INTO transacoes (usuario_id, tipo, valor, descricao) VALUES ($1, $2, $3, $4)',
-      [null, 'comissao_plataforma', valorTaxa, `Comissão da disputa ID ${id}`]
-    );
-
-    await db.query('COMMIT');
-
-    res.status(200).json({ message: 'Disputa finalizada com sucesso!', premio: valorPremio });
-
-  } catch (error) {
-    await db.query('ROLLBACK');
-    console.error('Erro ao finalizar disputa:', error);
-    res.status(500).json({ error: 'Erro ao finalizar disputa.' });
-  }
-});
-
-
-// ROTA 6: Contestar o resultado de uma disputa (POST /api/disputas/:id/contestar)
-router.post('/:id/contestar', async (req, res) => {
-  const { id } = req.params;
-  const { usuario_id, arquivo_prova_url } = req.body;
-
-  if (!id || !usuario_id) {
-    return res.status(400).json({ error: 'ID da disputa e ID do usuário são obrigatórios.' });
-  }
-
-  try {
-    await db.query('BEGIN');
-
-    await db.query('UPDATE disputas SET status = $1 WHERE id = $2', ['contestada', id]);
-
-    await db.query(
-      'UPDATE resultados_disputa SET status_final = $1 WHERE disputa_id = $2',
-      ['analise_plataforma', id]
-    );
-
-    if (arquivo_prova_url) {
-      console.log(`Prova enviada para o usuário ${usuario_id} na disputa ${id}: ${arquivo_prova_url}`);
+    if (!id || !vencedor_usuario_id) {
+        return res.status(400).json({ error: 'ID da disputa e ID do vencedor são obrigatórios.' });
     }
 
-    await db.query('COMMIT');
+    try {
+        const disputa = await db.query('SELECT valor_aposta_criador, valor_aposta_desafiado FROM disputas WHERE id = $1', [id]);
+        if (disputa.rows.length === 0) return res.status(404).json({ error: 'Disputa não encontrada.' });
 
-    res.status(200).json({ message: 'Disputa contestada com sucesso! A análise será feita pela plataforma.' });
+        const valorTotal = parseFloat(disputa.rows[0].valor_aposta_criador) + parseFloat(disputa.rows[0].valor_aposta_desafiado);
+        const taxa = await db.query('SELECT valor FROM configuracoes_plataforma WHERE chave = $1', ['taxa_disputa_pessoal']);
+        const valorTaxa = valorTotal * (parseFloat(taxa.rows[0].valor) / 100);
+        const valorPremio = valorTotal - valorTaxa;
 
-  } catch (error) {
-    await db.query('ROLLBACK');
-    console.error('Erro ao contestar disputa:', error);
-    res.status(500).json({ error: 'Erro ao contestar disputa.' });
-  }
+        await db.query('BEGIN');
+
+        // 1. Registra o resultado da disputa
+        await db.query(
+            'INSERT INTO resultados_disputa (disputa_id, vencedor_usuario_id, status_final) VALUES ($1, $2, $3)',
+            [id, vencedor_usuario_id, 'consenso']
+        );
+
+        // 2. Atualiza o status da disputa
+        await db.query('UPDATE disputas SET status = $1 WHERE id = $2', ['finalizada', id]);
+
+        // 3. Transfere o valor para o vencedor
+        await db.query(
+            'UPDATE usuarios SET saldo = saldo + $1 WHERE id = $2',
+            [valorPremio, vencedor_usuario_id]
+        );
+
+        // 4. Registra a transação de ganho do vencedor
+        await db.query(
+            'INSERT INTO transacoes (usuario_id, tipo, valor, descricao, disputa_id) VALUES ($1, $2, $3, $4, $5)',
+            [vencedor_usuario_id, 'ganho_desafio', valorPremio, `Ganho no desafio ID ${id}`, id]
+        );
+
+        // 5. Registra a transação da comissão da plataforma
+        await db.query(
+            'INSERT INTO transacoes (usuario_id, tipo, valor, descricao) VALUES ($1, $2, $3, $4)',
+            [null, 'comissao_plataforma', valorTaxa, `Comissão do desafio ID ${id}`]
+        );
+
+        await db.query('COMMIT');
+        res.status(200).json({ message: 'Disputa finalizada com sucesso!', premio: valorPremio });
+
+    } catch (error) {
+        await db.query('ROLLBACK');
+        console.error('Erro ao finalizar disputa:', error);
+        res.status(500).json({ error: 'Erro ao finalizar disputa.' });
+    }
+});
+
+// ROTA 5: Contestar o resultado de uma disputa (POST /api/disputas/:id/contestar)
+router.post('/:id/contestar', async (req, res) => {
+    const { id } = req.params;
+    const { usuario_id } = req.body;
+
+    if (!id || !usuario_id) {
+        return res.status(400).json({ error: 'ID da disputa e ID do usuário são obrigatórios.' });
+    }
+
+    try {
+        await db.query('BEGIN');
+
+        // 1. Atualiza o status da disputa para 'contestada'
+        await db.query('UPDATE disputas SET status = $1 WHERE id = $2', ['contestada', id]);
+
+        // 2. Atualiza o resultado para 'em análise'
+        await db.query(
+            'UPDATE resultados_disputa SET status_final = $1 WHERE disputa_id = $2',
+            ['analise_plataforma', id]
+        );
+
+        await db.query('COMMIT');
+        res.status(200).json({ message: 'Disputa contestada com sucesso! A análise será feita pela plataforma.' });
+
+    } catch (error) {
+        await db.query('ROLLBACK');
+        console.error('Erro ao contestar disputa:', error);
+        res.status(500).json({ error: 'Erro ao contestar disputa.' });
+    }
 });
 
 
-// --- ROTA DE TESTE: Criar um novo usuário (POST /api/disputas/usuarios) ---
-// CORRIGIDO para usar as colunas 'email' e 'senha_hash' da sua tabela
+// ROTA DE TESTE: Criar um novo usuário (POST /api/disputas/usuarios)
 router.post('/usuarios', async (req, res) => {
   const { nome, email, senha } = req.body;
   if (!nome || !email || !senha) {
     return res.status(400).json({ error: 'Nome, email e senha são obrigatórios.' });
   }
   try {
-    // Em um app real, a senha seria hasheada! Ex: bcrypt.hashSync(senha, 10)
-    // Por enquanto, vamos salvar direto, mas é uma boa prática usar um hash.
     const senha_hash = senha; // MUDADO: usa 'senha_hash'
     
     const newUser = await db.query(
@@ -278,6 +223,5 @@ router.post('/usuarios', async (req, res) => {
     res.status(500).json({ error: 'Erro ao criar usuário.' });
   }
 });
-
 
 module.exports = router;
