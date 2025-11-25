@@ -8,7 +8,8 @@
         body { font-family: sans-serif; padding: 20px; background-color: #f4f4f4; }
         .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
         h1, h2 { color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-        form { display: flex; flex-direction: column; gap: 15px; margin-bottom: 40px; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
+        .section { margin-bottom: 40px; }
+        form { display: flex; flex-direction: column; gap: 15px; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
         input, select { padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
         button { padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
         button:hover { background-color: #0056b3; }
@@ -26,41 +27,62 @@
 <body>
 
     <div class="container">
-        <h1>Criar Novo Campeonato</h1>
-        <form id="form-criar-campeonato">
-            <input type="hidden" id="criador_id" value="6">
-            <label for="nome">Nome do Campeonato:</label>
-            <input type="text" id="nome" required>
-            <label for="modalidade">Modalidade:</label>
-            <input type="text" id="modalidade" value="Futevôlei de Duplas" required>
-            <label for="valor_inscricao">Valor da Inscrição:</label>
-            <input type="number" id="valor_inscricao" step="0.01" value="50.00" required>
-            <label for="premio_1">Prêmio 1º Lugar (%):</label>
-            <input type="number" id="premio_1" step="0.01" value="0.6" required>
-            <button type="submit">Criar Campeonato</button>
-        </form>
+        <div class="section">
+            <h1>Criar Novo Desafio</h1>
+            <form id="form-criar-desafio">
+                <input type="hidden" id="criador_id" value="7"> <!-- Usuário logado (ID 7) -->
+                <label for="desafiado_id">Desafiar Usuário ID:</label>
+                <input type="number" id="desafiado_id" value="6" required>
+                <label for="titulo">Título do Desafio:</label>
+                <input type="text" id="titulo" value="Desafio de Teste via Frontend" required>
+                <label for="valor_aposta_criador">Sua Aposta:</label>
+                <input type="number" id="valor_aposta_criador" step="0.01" value="40.00" required>
+                <button type="submit">Criar Desafio</button>
+            </form>
+        </div>
 
         <div id="message"></div>
 
-        <h2>Campeonatos Abertos</h2>
-        <ul id="campeonatos-list" class="list-container">
-            <!-- A lista de campeonatos será carregada aqui pelo JavaScript -->
-        </ul>
+        <div class="section">
+            <h1>Criar Novo Campeonato</h1>
+            <form id="form-criar-campeonato">
+                <input type="hidden" id="criador_id_campeonato" value="6">
+                <label for="nome_campeonato">Nome do Campeonato:</label>
+                <input type="text" id="nome_campeonato" value="Campeonato de Teste via Frontend" required>
+                <label for="modalidade_campeonato">Modalidade:</label>
+                <input type="text" id="modalidade_campeonato" value="Futevôlei de Duplas" required>
+                <label for="valor_inscricao_campeonato">Valor da Inscrição:</label>
+                <input type="number" id="valor_inscricao_campeonato" step="0.01" value="50.00" required>
+                <label for="premio_1_campeonato">Prêmio 1º Lugar (%):</label>
+                <input type="number" id="premio_1_campeonato" step="0.01" value="1.0" required>
+                <button type="submit">Criar Campeonato</button>
+            </form>
+        </div>
 
-        <h2>Disputas Abertas (Desafios)</h2>
-        <ul id="desafios-list" class="list-container">
-            <!-- A lista de desafios será carregada aqui pelo JavaScript -->
-        </ul>
+        <div class="section">
+            <h2>Campeonatos Abertos</h2>
+            <ul id="campeonatos-list" class="list-container">
+                <!-- A lista de campeonatos será carregada aqui pelo JavaScript -->
+            </ul>
+        </div>
+
+        <div class="section">
+            <h2>Disputas Abertas (Desafios)</h2>
+            <ul id="desafios-list" class="list-container">
+                <!-- A lista de desafios será carregada aqui pelo JavaScript -->
+            </ul>
+        </div>
     </div>
 
     <script>
         const API_URL = 'https://gameson.onrender.com/api';
+        const formDesafio = document.getElementById('form-criar-desafio');
         const formCampeonato = document.getElementById('form-criar-campeonato');
         const campeonatosList = document.getElementById('campeonatos-list');
         const desafiosList = document.getElementById('desafios-list');
         const messageDiv = document.getElementById('message');
 
-        // ID do usuário que está logado (para teste, vamos usar o ID 7)
+        // ID do usuário que está logado (para teste)
         const USUARIO_LOGADO_ID = 7;
 
         // Função para exibir mensagens
@@ -139,14 +161,14 @@
         }
         
         // Função para mostrar/esconder o formulário de aceite
-        function mostrarFormularioAceite(disafioId) {
+        function mostrarFormularioAceite(desafioId) {
             const formDiv = document.getElementById(`form-aceite-${desafioId}`);
             formDiv.style.display = formDiv.style.display === 'none' ? 'block' : 'none';
         }
 
         // Função para enviar o aceite do desafio
         async function aceitarDesafio(event, disputaId) {
-            event.preventDefault(); // Impede o recarregamento da página
+            event.preventDefault();
             const form = event.target;
             const valorAposta = parseFloat(form.querySelector('input[type="number"]').value);
 
@@ -171,7 +193,7 @@
                 }
 
                 showMessage(result.message || 'Desafio aceito com sucesso!');
-                form.style.display = 'none'; // Esconde o formulário após o sucesso
+                form.style.display = 'none';
                 fetchDesafios(); // Recarrega a lista de desafios abertos
 
             } catch (error) {
@@ -180,16 +202,48 @@
             }
         }
 
+        // Event listener para o formulário de criação de desafio
+        formDesafio.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const dadosDesafio = {
+                criador_id: parseInt(document.getElementById('criador_id').value),
+                desafiado_id: parseInt(document.getElementById('desafiado_id').value),
+                titulo: document.getElementById('titulo').value,
+                valor_aposta_criador: parseFloat(document.getElementById('valor_aposta_criador').value)
+            };
+
+            try {
+                const response = await fetch(`${API_URL}/disputas`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(dadosDesafio),
+                });
+
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.error || 'Erro ao criar o desafio.');
+                }
+
+                showMessage('Desafio criado com sucesso!');
+                formDesafio.reset();
+                fetchDesafios();
+
+            } catch (error) {
+                showMessage(`Erro: ${error.message}`, true);
+                console.error(error);
+            }
+        });
+
         // Event listener para o formulário de criação de campeonato
         formCampeonato.addEventListener('submit', async (event) => {
             event.preventDefault();
             const dadosCampeonato = {
-                criador_id: parseInt(document.getElementById('criador_id').value),
-                nome: document.getElementById('nome').value,
-                modalidade: document.getElementById('modalidade').value,
-                valor_inscricao: parseFloat(document.getElementById('valor_inscricao').value),
+                criador_id: parseInt(document.getElementById('criador_id_campeonato').value),
+                nome: document.getElementById('nome_campeonato').value,
+                modalidade: document.getElementById('modalidade_campeonato').value,
+                valor_inscricao: parseFloat(document.getElementById('valor_inscricao_campeonato').value),
                 distribuicao_premios: {
-                    "1": parseFloat(document.getElementById('premio_1').value)
+                    "1": parseFloat(document.getElementById('premio_1_campeonato').value)
                 }
             };
 
@@ -202,7 +256,7 @@
 
                 const result = await response.json();
                 if (!response.ok) {
-                    throw new Error(result.error || 'Erro ao criar campeonato.');
+                    throw new Error(result.error || 'Erro ao criar o campeonato.');
                 }
 
                 showMessage('Campeonato criado com sucesso!');
