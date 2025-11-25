@@ -16,9 +16,10 @@ const proximaFaseMap = {
 // --- ROTA 1: Listar campeonatos abertos (GET /api/campeonatos) ---
 router.get('/', async (req, res) => {
   try {
+    // AJUSTE: Usando o seu status 'aberto_para_inscricao'
     const result = await db.query(
       'SELECT * FROM campeonatos WHERE status = $1 ORDER BY data_criacao DESC',
-      ['aberto']
+      ['aberto_para_inscricao']
     );
     res.status(200).json(result.rows);
   } catch (error) {
@@ -29,19 +30,19 @@ router.get('/', async (req, res) => {
 
 // --- ROTA 2: Criar um novo campeonato (POST /api/campeonatos) ---
 router.post('/', async (req, res) => {
-  // MUDANÇA: O body agora aceita 'formato' e 'configuracoes'
-  const { criador_id, nome, modalidade, valor_inscricao, formato, configuracoes } = req.body;
+  // AJUSTE: O body agora usa 'distribuicao_premios' no nível raiz, conforme sua tabela
+  const { criador_id, nome, descricao, modalidade, esporte, valor_inscricao, formato, distribuicao_premios, configuracoes } = req.body;
   const taxa_plataforma = 0.10;
 
-  if (!criador_id || !nome || !modalidade || !valor_inscricao || !formato || !configuracoes) {
-    return res.status(400).json({ error: 'Campos obrigatórios faltando (criador_id, nome, modalidade, valor_inscricao, formato, configuracoes).' });
+  if (!criador_id || !nome || !modalidade || !valor_inscricao || !formato || !distribuicao_premios) {
+    return res.status(400).json({ error: 'Campos obrigatórios faltando (criador_id, nome, modalidade, valor_inscricao, formato, distribuicao_premios).' });
   }
 
   try {
     const newCampeonato = await db.query(
-      `INSERT INTO campeonatos (criador_id, nome, modalidade, valor_inscricao, taxa_plataforma, formato, configuracoes, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'aberto') RETURNING *`,
-      [criador_id, nome, modalidade, valor_inscricao, taxa_plataforma, formato, JSON.stringify(configuracoes)]
+      `INSERT INTO campeonatos (criador_id, nome, descricao, modalidade, esporte, valor_inscricao, taxa_plataforma, formato, distribuicao_premios, configuracoes, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'aberto_para_inscricao') RETURNING *`,
+      [criador_id, nome, descricao, modalidade, esporte, valor_inscricao, taxa_plataforma, formato, JSON.stringify(distribuicao_premios), JSON.stringify(configuracoes || {})]
     );
 
     res.status(201).json(newCampeonato.rows[0]);
@@ -64,8 +65,9 @@ router.post('/:id/participar', async (req, res) => {
   try {
     await db.query('BEGIN');
 
+    // AJUSTE: Usando o seu status 'aberto_para_inscricao'
     const campeonatoQuery = await db.query('SELECT * FROM campeonatos WHERE id = $1', [id]);
-    if (campeonatoQuery.rows.length === 0 || campeonatoQuery.rows[0].status !== 'aberto') {
+    if (campeonatoQuery.rows.length === 0 || campeonatoQuery.rows[0].status !== 'aberto_para_inscricao') {
       await db.query('ROLLBACK');
       return res.status(400).json({ error: 'Campeonato não encontrado ou inscrições encerradas.' });
     }
@@ -127,15 +129,9 @@ router.post('/:id/iniciar', async (req, res) => {
 
         // Lógica para definir a fase inicial com base no número de participantes
         let faseNome = 'final';
-        if (participantes.length > 2) {
-            faseNome = 'semifinal';
-        }
-        if (participantes.length > 4) {
-            faseNome = 'quartas';
-        }
-        if (participantes.length > 8) {
-            faseNome = 'oitavas';
-        }
+        if (participantes.length > 2) faseNome = 'semifinal';
+        if (participantes.length > 4) faseNome = 'quartas';
+        if (participantes.length > 8) faseNome = 'oitavas';
 
         const participantesEmbaralhados = participantes.sort(() => Math.random() - 0.5);
         const jogos = [];
@@ -219,15 +215,12 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
             const premioEliminacao = parseFloat(premiacaoProgressiva.valor_eliminacao);
             const premioPorJogador = premioEliminacao / 2;
 
-            // Pagar os jogadores da dupla eliminada
             await db.query('UPDATE usuarios SET saldo = saldo + $1 WHERE id = $2', [premioPorJogador, perdedorDupla.usuario1_id]);
             await db.query('UPDATE usuarios SET saldo = saldo + $1 WHERE id = $2', [premioPorJogador, perdedorDupla.usuario2_id]);
             
-            // Registrar transações
             await db.query('INSERT INTO transacoes (usuario_id, tipo, valor, descricao, campeonato_id) VALUES ($1, $2, $3, $4, $5)', [perdedorDupla.usuario1_id, 'premio_eliminacao', premioPorJogador, `Prêmio de eliminação no campeonato ${id}`, campeonatoIdInt]);
             await db.query('INSERT INTO transacoes (usuario_id, tipo, valor, descricao, campeonato_id) VALUES ($1, $2, $3, $4, $5)', [perdedorDupla.usuario2_id, 'premio_eliminacao', premioPorJogador, `Prêmio de eliminação no campeonato ${id}`, campeonatoIdInt]);
 
-            // Deduzir do pote total
             await db.query('UPDATE campeonatos SET pote_total = pote_total - $1 WHERE id = $2', [premioEliminacao, campeonatoIdInt]);
         }
         // --- FIM DA NOVA LÓGICA ---
@@ -246,14 +239,12 @@ router.post('/:id/jogos/:jogoId/reportar', async (req, res) => {
             if (proximaFase === 'finalizado') {
                 await finalizarCampeonato(campeonatoIdInt, vencedoresDaFase);
             } else if (proximaFase === 'disputa_terceiro_lugar') {
-                 // Lógica para criar a disputa de 3º lugar com os perdedores da semifinal
-                const jogosSemifinais = jogosDaFaseQuery.rows;
-                const perdedoresSemifinal = jogosSemifinais.map(jogo => {
+                 const jogosSemifinais = await db.query('SELECT * FROM jogos_campeonato WHERE campeonato_id = $1 AND fase = $2', [campeonatoIdInt, 'semifinal']);
+                 const perdedoresSemifinal = jogosSemifinais.rows.map(jogo => {
                     if (jogo.vencedor_id === jogo.participante1_id) return jogo.participante2_id;
                     return jogo.participante1_id;
                 });
                 await criarProximaFase(campeonatoIdInt, proximaFase, perdedoresSemifinal);
-                // E também criar a final
                 await criarProximaFase(campeonatoIdInt, 'final', vencedoresDaFase);
             } else {
                 await criarProximaFase(campeonatoIdInt, proximaFase, vencedoresDaFase);
@@ -293,12 +284,11 @@ async function criarProximaFase(campeonatoId, nomeFase, vencedoresIds) {
 async function finalizarCampeonato(campeonatoId, vencedoresFinais) {
     const campeonatoQuery = await db.query('SELECT * FROM campeonatos WHERE id = $1', [campeonatoId]);
     const campeonato = campeonatoQuery.rows[0];
-    const config = campeonato.configuracoes;
-    const distribuicaoPremios = config.distribuicao_premios_finais;
+    
+    // AJUSTE: Lendo da sua coluna 'distribuicao_premios'
+    const distribuicaoPremios = campeonato.distribuicao_premios;
+    const potePremios = parseFloat(campeonato.pote_total);
 
-    const potePremios = parseFloat(campeonato.pote_total); // Este pote já foi reduzido pelos prêmios de eliminação
-
-    // Pega os IDs das duplas vencedoras
     const vencedorFinalQuery = await db.query('SELECT usuario1_id, usuario2_id FROM participantes_campeonato WHERE id = $1', [vencedoresFinais[0]]);
     const viceFinalQuery = await db.query('SELECT usuario1_id, usuario2_id FROM participantes_campeonato WHERE id = $1', [vencedoresFinais[1]]);
     const terceiroLugarQuery = await db.query('SELECT usuario1_id, usuario2_id FROM participantes_campeonato WHERE id = $1', [vencedoresFinais[2]]);
@@ -307,7 +297,6 @@ async function finalizarCampeonato(campeonatoId, vencedoresFinais) {
     const viceFinal = viceFinalQuery.rows[0];
     const terceiroLugar = terceiroLugarQuery.rows[0];
 
-    // Calcular e pagar prêmios
     const premioPrimeiro = potePremios * distribuicaoPremios['1'];
     const premioSegundo = potePremios * distribuicaoPremios['2'];
     const premioTerceiro = potePremios * distribuicaoPremios['3'];
