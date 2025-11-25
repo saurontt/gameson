@@ -1,4 +1,3 @@
-cat > routes/campeonatos.js << 'EOF'
 const express = require('express');
 const db = require('../db');
 const router = express.Router();
@@ -155,6 +154,6 @@ router.post('/:id/iniciar', async (req, res) => {
     }
 });
 
-// O resto do arquivo continua igual...
+// O resto do arquivo (reportar resultado, etc.) pode ser adicionado depois.
+// Por ora, vamos focar em fazer a criação de jogos funcionar.
 module.exports = router;
-EOF
