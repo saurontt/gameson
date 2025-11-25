@@ -3,277 +3,201 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GamesOn - Teste de Campeonatos e Disputas</title>
+    <title>GamesOn - Campeonatos</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: sans-serif; padding: 20px; background-color: #f4f4f4; }
-        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        h1, h2 { color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-        .section { margin-bottom: 40px; }
-        form { display: flex; flex-direction: column; gap: 15px; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
-        input, select { padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
-        button { padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
-        button:hover { background-color: #0056b3; }
-        #message { padding: 10px; margin-top: 15px; border-radius: 5px; display: none; }
-        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        .list-container { list-style-type: none; padding: 0; }
-        .item { background: #e9ecef; margin-bottom: 10px; padding: 15px; border-radius: 5px; border-left: 5px solid #007bff; }
-        .item h3 { margin: 0 0 10px 0; }
-        .item p { margin: 0 0 5px 0; color: #555; }
-        .item .actions { margin-top: 15px; }
-        .accept-form { margin-top: 15px; padding: 15px; border: 1px dashed #ccc; border-radius: 5px; background-color: #f9f9f9; }
+        /* Estilos Gerais e Reset */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5;
+            color: #1a2b4d;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #0d1b2a;
+            margin-bottom: 40px;
+        }
+
+        /* Estilos da Lista de Campeonatos */
+        .campeonatos-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .campeonato-card {
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            padding: 24px;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            border: 1px solid #e1e4e8;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .campeonato-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+        }
+
+        .card-header {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #0d1b2a;
+            margin-bottom: 8px;
+        }
+
+        .card-subtitle {
+            font-size: 0.9rem;
+            color: #64748b;
+            margin-bottom: 16px;
+        }
+
+        .card-body {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.95rem;
+        }
+
+        .info-label {
+            color: #64748b;
+        }
+
+        .info-value {
+            font-weight: 600;
+            color: #1a2b4d;
+        }
+
+        .card-footer {
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid #e1e4e8;
+        }
+
+        .participantes {
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+
+        /* Mensagem de Carregamento e Erro */
+        .message {
+            text-align: center;
+            padding: 20px;
+            font-size: 1.1rem;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .loading {
+            background-color: #e0f2fe;
+            color: #01579b;
+        }
+
+        .error {
+            background-color: #fde8e8;
+            color: #b91c1c;
+        }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <div class="section">
-            <h1>Criar Novo Desafio</h1>
-            <form id="form-criar-desafio">
-                <input type="hidden" id="criador_id" value="7"> <!-- Usuário logado (ID 7) -->
-                <label for="desafiado_id">Desafiar Usuário ID:</label>
-                <input type="number" id="desafiado_id" value="6" required>
-                <label for="titulo">Título do Desafio:</label>
-                <input type="text" id="titulo" value="Desafio de Teste via Frontend" required>
-                <label for="valor_aposta_criador">Sua Aposta:</label>
-                <input type="number" id="valor_aposta_criador" step="0.01" value="40.00" required>
-                <button type="submit">Criar Desafio</button>
-            </form>
+        <h1>Campeonatos Abertos</h1>
+        
+        <div id="campeonatos-list" class="campeonatos-grid">
+            <!-- Os cards dos campeonatos serão inseridos aqui pelo JavaScript -->
         </div>
 
-        <div id="message"></div>
-
-        <div class="section">
-            <h1>Criar Novo Campeonato</h1>
-            <form id="form-criar-campeonato">
-                <input type="hidden" id="criador_id_campeonato" value="6">
-                <label for="nome_campeonato">Nome do Campeonato:</label>
-                <input type="text" id="nome_campeonato" value="Campeonato de Teste via Frontend" required>
-                <label for="modalidade_campeonato">Modalidade:</label>
-                <input type="text" id="modalidade_campeonato" value="Futevôlei de Duplas" required>
-                <label for="valor_inscricao_campeonato">Valor da Inscrição:</label>
-                <input type="number" id="valor_inscricao_campeonato" step="0.01" value="50.00" required>
-                <label for="premio_1_campeonato">Prêmio 1º Lugar (%):</label>
-                <input type="number" id="premio_1_campeonato" step="0.01" value="1.0" required>
-                <button type="submit">Criar Campeonato</button>
-            </form>
-        </div>
-
-        <div class="section">
-            <h2>Campeonatos Abertos</h2>
-            <ul id="campeonatos-list" class="list-container">
-                <!-- A lista de campeonatos será carregada aqui pelo JavaScript -->
-            </ul>
-        </div>
-
-        <div class="section">
-            <h2>Disputas Abertas (Desafios)</h2>
-            <ul id="desafios-list" class="list-container">
-                <!-- A lista de desafios será carregada aqui pelo JavaScript -->
-            </ul>
-        </div>
+        <div id="message" class="message" style="display: none;"></div>
     </div>
 
     <script>
         const API_URL = 'https://gameson.onrender.com/api';
-        const formDesafio = document.getElementById('form-criar-desafio');
-        const formCampeonato = document.getElementById('form-criar-campeonato');
         const campeonatosList = document.getElementById('campeonatos-list');
-        const desafiosList = document.getElementById('desafios-list');
         const messageDiv = document.getElementById('message');
 
-        // ID do usuário que está logado (para teste)
-        const USUARIO_LOGADO_ID = 6;
-
         // Função para exibir mensagens
-        function showMessage(text, isError = false) {
+        function showMessage(text, type) {
             messageDiv.textContent = text;
-            messageDiv.className = isError ? 'error' : 'success';
+            messageDiv.className = `message ${type}`;
             messageDiv.style.display = 'block';
-            setTimeout(() => { messageDiv.style.display = 'none'; }, 5000);
         }
 
-        // Função para buscar e exibir os campeonatos
-        async function fetchCampeonatos() {
+        // Função para buscar e renderizar os campeonatos
+        async function fetchAndRenderCampeonatos() {
+            showMessage('Carregando campeonatos...', 'loading');
+            campeonatosList.innerHTML = ''; // Limpa a lista anterior
+
             try {
                 const response = await fetch(`${API_URL}/campeonatos`);
-                if (!response.ok) throw new Error('Falha ao buscar campeonatos.');
+                if (!response.ok) {
+                    throw new Error('Falha ao buscar os campeonatos.');
+                }
                 const campeonatos = await response.json();
-                campeonatosList.innerHTML = '';
-                if (campeonatos.length === 0) {
-                    campeonatosList.innerHTML = '<li class="item">Nenhum campeonato aberto no momento.</li>';
-                    return;
-                }
-                campeonatos.forEach(campeonato => {
-                    const li = document.createElement('li');
-                    li.className = 'item';
-                    li.innerHTML = `
-                        <h3>${campeonato.nome}</h3>
-                        <p><strong>Modalidade:</strong> ${campeonato.modalidade}</p>
-                        <p><strong>Inscrição:</strong> R$ ${parseFloat(campeonato.valor_inscricao).toFixed(2)}</p>
-                        <p><strong>Pote Atual:</strong> R$ ${parseFloat(campeonato.pote_total).toFixed(2)}</p>
-                    `;
-                    campeonatosList.appendChild(li);
-                });
-            } catch (error) {
-                showMessage('Erro ao carregar a lista de campeonatos.', true);
-                console.error(error);
-            }
-        }
 
-        // Função para buscar e exibir os desafios
-        async function fetchDesafios() {
-            try {
-                const response = await fetch(`${API_URL}/disputas/abertos`);
-                if (!response.ok) throw new Error('Falha ao buscar desafios.');
-                const desafios = await response.json();
-                desafiosList.innerHTML = '';
-                if (desafios.length === 0) {
-                    desafiosList.innerHTML = '<li class="item">Nenhum desafio aberto no momento.</li>';
+                messageDiv.style.display = 'none'; // Esconde a mensagem de carregamento
+
+                if (campeonatos.length === 0) {
+                    campeonatosList.innerHTML = '<p style="text-align: center; color: #64748b;">Nenhum campeonato aberto no momento. Crie um novo!</p>';
                     return;
                 }
-                desafios.forEach(desafio => {
-                    const li = document.createElement('li');
-                    li.className = 'item';
-                    li.innerHTML = `
-                        <h3>${desafio.titulo}</h3>
-                        <p><strong>Criador:</strong> ${desafio.criador_nome}</p>
-                        <p><strong>Desafiado:</strong> ${desafio.desafiado_nome}</p>
-                        <p><strong>Aposta do Criador:</strong> R$ ${parseFloat(desafio.valor_aposta_criador).toFixed(2)}</p>
-                        <div class="actions">
-                            <button onclick="mostrarFormularioAceite(${desafio.id})">Aceitar Desafio</button>
-                            <div id="form-aceite-${desafio.id}" class="accept-form" style="display: none;">
-                                <h4>Aceitar este desafio e definir sua aposta</h4>
-                                <form onsubmit="aceitarDesafio(event, ${desafio.id})">
-                                    <label>Seu valor da aposta:</label>
-                                    <input type="number" step="0.01" required>
-                                    <button type="submit">Apostar e Aceitar</button>
-                                </form>
+
+                campeonatos.forEach(campeonato => {
+                    const card = document.createElement('div');
+                    card.className = 'campeonato-card';
+                    
+                    // Formata os valores monetários
+                    const valorInscricao = parseFloat(campeonato.valor_inscricao).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                    const poteTotal = parseFloat(campeonato.pote_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                    const numParticipantes = campeonato.num_participantes || 0; // Ajuste conforme sua query
+
+                    card.innerHTML = `
+                        <div class="card-header">${campeonato.nome}</div>
+                        <div class="card-subtitle">${campeonato.modalidade}</div>
+                        <div class="card-body">
+                            <div class="info-item">
+                                <span class="info-label">Inscrição:</span>
+                                <span class="info-value">${valorInscricao}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Pote:</span>
+                                <span class="info-value">${poteTotal}</span>
                             </div>
                         </div>
+                        <div class="card-footer">
+                            <div class="participantes">${numParticipantes} participantes</div>
+                        </div>
                     `;
-                    desafiosList.appendChild(li);
-                });
-            } catch (error) {
-                showMessage('Erro ao carregar a lista de desafios.', true);
-                console.error(error);
-            }
-        }
-        
-        // Função para mostrar/esconder o formulário de aceite
-        function mostrarFormularioAceite(desafioId) {
-            const formDiv = document.getElementById(`form-aceite-${desafioId}`);
-            formDiv.style.display = formDiv.style.display === 'none' ? 'block' : 'none';
-        }
-
-        // Função para enviar o aceite do desafio
-        async function aceitarDesafio(event, disputaId) {
-            event.preventDefault();
-            const form = event.target;
-            const valorAposta = parseFloat(form.querySelector('input[type="number"]').value);
-
-            if (!valorAposta || valorAposta <= 0) {
-                alert('Por favor, insira um valor de aposta válido.');
-                return;
-            }
-
-            try {
-                const response = await fetch(`${API_URL}/disputas/${disputaId}/aceitar`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        usuario_id: USUARIO_LOGADO_ID,
-                        valor_aposta_desafiado: valorAposta
-                    })
+                    campeonatosList.appendChild(card);
                 });
 
-                const result = await response.json();
-                if (!response.ok) {
-                    throw new Error(result.error || 'Erro ao aceitar o desafio.');
-                }
-
-                showMessage(result.message || 'Desafio aceito com sucesso!');
-                form.style.display = 'none';
-                fetchDesafios(); // Recarrega a lista de desafios abertos
-
             } catch (error) {
-                showMessage(`Erro: ${error.message}`, true);
-                console.error(error);
+                showMessage('Erro ao carregar os campeonatos. Tente novamente mais tarde.', 'error');
+                console.error('Erro ao buscar campeonatos:', error);
             }
         }
 
-        // Event listener para o formulário de criação de desafio
-        formDesafio.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const dadosDesafio = {
-                criador_id: parseInt(document.getElementById('criador_id').value),
-                desafiado_id: parseInt(document.getElementById('desafiado_id').value),
-                titulo: document.getElementById('titulo').value,
-                valor_aposta_criador: parseFloat(document.getElementById('valor_aposta_criador').value)
-            };
-
-            try {
-                const response = await fetch(`${API_URL}/disputas`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(dadosDesafio),
-                });
-
-                const result = await response.json();
-                if (!response.ok) {
-                    throw new Error(result.error || 'Erro ao criar o desafio.');
-                }
-
-                showMessage('Desafio criado com sucesso!');
-                formDesafio.reset();
-                fetchDesafios();
-
-            } catch (error) {
-                showMessage(`Erro: ${error.message}`, true);
-                console.error(error);
-            }
-        });
-
-        // Event listener para o formulário de criação de campeonato
-        formCampeonato.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const dadosCampeonato = {
-                criador_id: parseInt(document.getElementById('criador_id_campeonato').value),
-                nome: document.getElementById('nome_campeonato').value,
-                modalidade: document.getElementById('modalidade_campeonato').value,
-                valor_inscricao: parseFloat(document.getElementById('valor_inscricao_campeonato').value),
-                distribuicao_premios: {
-                    "1": parseFloat(document.getElementById('premio_1_campeonato').value)
-                }
-            };
-
-            try {
-                const response = await fetch(`${API_URL}/campeonatos`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(dadosCampeonato),
-                });
-
-                const result = await response.json();
-                if (!response.ok) {
-                    throw new Error(result.error || 'Erro ao criar o campeonato.');
-                }
-
-                showMessage('Campeonato criado com sucesso!');
-                formCampeonato.reset();
-                fetchCampeonatos();
-
-            } catch (error) {
-                showMessage(`Erro: ${error.message}`, true);
-                console.error(error);
-            }
-        });
-
-        // Carrega as listas quando a página é aberta
-        document.addEventListener('DOMContentLoaded', () => {
-            fetchCampeonatos();
-            fetchDesafios();
-        });
+        // Carrega os campeonatos quando a página é aberta
+        document.addEventListener('DOMContentLoaded', fetchAndRenderCampeonatos);
     </script>
 
 </body>
