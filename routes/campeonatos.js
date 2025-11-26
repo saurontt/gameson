@@ -324,5 +324,45 @@ async function finalizarCampeonato(campeonatoId, vencedoresFinais) {
     await db.query('UPDATE campeonatos SET status = $1, resultado_final = $2 WHERE id = $3', ['finalizado', resultadoFinalJson, campeonatoId]);
     console.log(`Campeonato ${campeonatoId} finalizado! Taxa de ${taxaPlataformaDecimal * 100}% aplicada.`);
 }
+// --- NOVA ROTA: Listar campeonatos com detalhes para o front-end (GET /api/campeonatos/listar-detalhados) ---
+router.get('/listar-detalhados', async (req, res) => {
+    try {
+        // Query principal para buscar os campeonatos e informações do criador
+        const queryCampeonatos = `
+            SELECT 
+                c.id,
+                c.nome,
+                c.descricao,
+                c.modalidade,
+                c.esporte,
+                c.valor_inscricao,
+                c.pote_total,
+                c.data_criacao,
+                c.status,
+                u.nome AS nome_criador
+            FROM campeonatos c
+            LEFT JOIN usuarios u ON c.criador_id = u.id
+            ORDER BY c.data_criacao DESC
+        `;
+        const campeonatosResult = await db.query(queryCampeonatos);
+        const campeonatos = campeonatosResult.rows;
 
+        // Para cada campeonato, buscamos o número de participantes
+        for (const campeonato of campeonatos) {
+            const queryParticipantes = `
+                SELECT COUNT(*) as total_participantes
+                FROM participantes_campeonato
+                WHERE campeonato_id = $1
+            `;
+            const participantesResult = await db.query(queryParticipantes, [campeonato.id]);
+            campeonato.total_participantes = parseInt(participantesResult.rows[0].total_participantes);
+        }
+
+        res.status(200).json(campeonatos);
+
+    } catch (error) {
+        console.error("Erro ao buscar campeonatos detalhados:", error);
+        res.status(500).json({ error: "Erro interno no servidor ao buscar campeonatos." });
+    }
+});
 module.exports = router;
